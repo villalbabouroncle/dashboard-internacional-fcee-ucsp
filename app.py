@@ -29,7 +29,7 @@ SHEET_ID = "1T3eqTIyYhKF-QxW-DCApkN29wCz_XXJVjB9yYLjLuUo"
 HOJA_SALIENTE = "MOVILIDAD SALIENTE"
 HOJA_ENTRANTE = "MOVILIDAD ENTRANTE"
 HOJA_DOCENTES = "ACTIVIDADES DOCENTES"     # copia de la pestaña "Consoli" de la base docente
-HOJA_CURRICULA = "CURRICULA ALUMNOS"       # BASE_GENERAL de la consulta de currícula, con ID anónimo
+HOJA_CURRICULA = "CURRICULA DE ALUMNOS"       # BASE_GENERAL de la consulta de currícula, con ID anónimo
 HOJA_MATRICULADOS = "MATRICULADOS"         # matriculados por escuela y periodo (Transparencia UCSP)
 TIPOS_CURRICULA = ["Clase Espejo", "Profesor Visitante", "COIL"]
 
