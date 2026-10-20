@@ -29,6 +29,9 @@ SHEET_ID = "1T3eqTIyYhKF-QxW-DCApkN29wCz_XXJVjB9yYLjLuUo"
 HOJA_SALIENTE = "MOVILIDAD SALIENTE"
 HOJA_ENTRANTE = "MOVILIDAD ENTRANTE"
 HOJA_DOCENTES = "ACTIVIDADES DOCENTES"     # copia de la pestaña "Consoli" de la base docente
+HOJA_CURRICULA = "CURRICULA ALUMNOS"       # BASE_GENERAL de la consulta de currícula, con ID anónimo
+HOJA_MATRICULADOS = "MATRICULADOS"         # matriculados por escuela y periodo (Transparencia UCSP)
+TIPOS_CURRICULA = ["Clase Espejo", "Profesor Visitante", "COIL"]
 
 # Docentes: nombres completos de las escuelas y tipos que cuentan para el indicador
 ESCUELAS = {"ADM": "Administración de Negocios", "CONT": "Contabilidad"}
@@ -233,6 +236,99 @@ def cargar_docentes(libro: pd.ExcelFile):
     return out.reset_index(drop=True), None
 
 
+# ─────────────────────────────────────────────────────────────
+# INTERNACIONALIZACIÓN DE LA CURRÍCULA (alumnos)
+# Misma lógica que la macro GenerarResultados:
+#   indicador = alumnos únicos con actividad internacional / matriculados (Transparencia)
+#   en un rango de periodos se suman los valores de cada periodo (alumno-semestre)
+# ─────────────────────────────────────────────────────────────
+def _periodo_num(v):
+    """20251 / '2025-1' / '2025-01' -> '2025-01'."""
+    t = _txt(v)
+    if t is None:
+        return None
+    m = re.fullmatch(r"(\d{4})\s*-?\s*0?(\d)", t)
+    return f"{m[1]}-{int(m[2]):02d}" if m else _normalizar_periodo(v)
+
+
+def _escuela_nombre(v):
+    t = _categoria(v)
+    b = _sin_tildes(t)
+    if "administracion" in b:
+        return "Administración de Negocios"
+    if "contabilidad" in b:
+        return "Contabilidad"
+    return t.title() if t.isupper() else t
+
+
+def _hoja_ok(libro, nombre, columnas):
+    if nombre not in libro.sheet_names:
+        return None, f"Aún no existe la pestaña {nombre} en la hoja del dashboard."
+    d = libro.parse(nombre)
+    encabezados = " ".join(map(str, d.columns))
+    if re.search(r"#(VALUE|REF|N/A|NAME|ERROR)", encabezados):
+        return None, (f"La pestaña {nombre} muestra un error de fórmula ({encabezados.strip()}). "
+                      "Revisa su celda A1 (puede pedir 'Permitir acceso').")
+    falt = [c for c in columnas if c not in d.columns]
+    if falt:
+        return None, f"En la pestaña {nombre} faltan las columnas: {', '.join(falt)}."
+    return d, None
+
+
+def cargar_curricula(libro: pd.ExcelFile):
+    """Devuelve ((base, matriculados), mensaje)."""
+    b, msg = _hoja_ok(libro, HOJA_CURRICULA,
+                      ["PERIODO", "ESCUELA_PROFESIONAL", "ID_ALUMNO", "CURSO", "GRUPO", "TIPO_ACTIVIDAD"])
+    if b is None:
+        return None, msg
+    # Por seguridad: si llegaran nombres o códigos, se descartan
+    b = b.drop(columns=[c for c in ["ALUMNO", "CODIGO_ACADEMICO"] if c in b.columns])
+    b = b[b["PERIODO"].notna() & b["ID_ALUMNO"].notna()].copy()
+    base = pd.DataFrame({
+        "Periodo": b["PERIODO"].map(_periodo_num),
+        "Escuela": b["ESCUELA_PROFESIONAL"].map(_escuela_nombre),
+        "ID": b["ID_ALUMNO"].astype(str),
+        "Curso": b["CURSO"].map(_categoria),
+        "Grupo": b["GRUPO"].map(_categoria),
+        "Profesor": (b["PROFESOR"] if "PROFESOR" in b else pd.Series(index=b.index, dtype=object)).map(_categoria),
+        "Línea": (b["LINEA"] if "LINEA" in b else pd.Series(index=b.index, dtype=object)).map(_categoria),
+        "Tipo": b["TIPO_ACTIVIDAD"].map(lambda v: _txt(v) or ""),
+    }).dropna(subset=["Periodo"])
+    for t in TIPOS_CURRICULA:   # un registro puede tener varios tipos ("Clase Espejo, COIL")
+        base[t] = base["Tipo"].str.contains(t, case=False, regex=False)
+
+    m, msg_m = _hoja_ok(libro, HOJA_MATRICULADOS, ["PERIODO", "ESCUELA_PROFESIONAL", "MATRICULADOS"])
+    if m is not None:
+        mat = pd.DataFrame({
+            "Periodo": m["PERIODO"].map(_periodo_num),
+            "Escuela": m["ESCUELA_PROFESIONAL"].map(_escuela_nombre),
+            "Matriculados": pd.to_numeric(m["MATRICULADOS"], errors="coerce"),
+        }).dropna()
+        mat = mat.groupby(["Periodo", "Escuela"], as_index=False)["Matriculados"].sum()
+    else:
+        mat = pd.DataFrame(columns=["Periodo", "Escuela", "Matriculados"])
+    aviso = None if m is not None else (msg_m + " Se usarán los alumnos de la base como denominador.")
+    return (base.reset_index(drop=True), mat), aviso
+
+
+def resumen_curricula(base: pd.DataFrame, mat: pd.DataFrame, tipos_sel=None) -> pd.DataFrame:
+    """Una fila por periodo y escuela con denominador, numerador y desglose por tipo."""
+    tipos_sel = tipos_sel or TIPOS_CURRICULA
+    act = base[base[tipos_sel].any(axis=1)]
+    g = ["Periodo", "Escuela"]
+    r = base.groupby(g)["ID"].nunique().rename("En base").to_frame()
+    r["Con actividad"] = act.groupby(g)["ID"].nunique()
+    for t in TIPOS_CURRICULA:
+        r[t] = base[base[t]].groupby(g)["ID"].nunique()
+    r = r.fillna(0).astype(int).reset_index()
+    r = r.merge(mat, on=g, how="left")
+    r["Fuente"] = r["Matriculados"].notna().map({True: "Transparencia UCSP",
+                                                 False: "Respaldo: alumnos de la base (falta dato)"})
+    r["Matriculados"] = r["Matriculados"].fillna(r["En base"]).astype(int)
+    r["%"] = (r["Con actividad"] / r["Matriculados"]).where(r["Matriculados"] > 0, 0)
+    return r.sort_values(g).reset_index(drop=True)
+
+
 def actividades_unicas(filas: pd.DataFrame) -> pd.DataFrame:
     """Una fila por actividad (une las carreras que la comparten)."""
     if filas.empty:
@@ -299,7 +395,12 @@ def cargar_datos():
     except Exception as e:                       # un problema en docentes no tumba lo de alumnos
         doc, doc_msg = None, f"No se pudo leer la pestaña {HOJA_DOCENTES}: {e}"
 
-    return sal, ent, doc, doc_msg, fuente, datetime.now()
+    try:
+        cur, cur_msg = cargar_curricula(libro)
+    except Exception as e:
+        cur, cur_msg = None, f"No se pudo leer la pestaña {HOJA_CURRICULA}: {e}"
+
+    return sal, ent, doc, doc_msg, cur, cur_msg, fuente, datetime.now()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -605,6 +706,70 @@ panel_curricula = ui.nav_panel(
     ),
 )
 
+def kpi(titulo, id_, nota_id=None):
+    extra = [ui.output_text(nota_id, inline=False)] if nota_id else []
+    return ui.value_box(titulo, ui.output_text(id_), *extra)
+
+
+panel_curr_alumnos = ui.nav_panel(
+    "Internacionalización de la Currícula",
+    ui.output_ui("c_aviso"),
+    ui.layout_sidebar(
+        ui.sidebar(
+            ui.layout_columns(
+                ui.input_select("c_desde", "Periodo desde", choices=[]),
+                ui.input_select("c_hasta", "Periodo hasta", choices=[]),
+                col_widths=(6, 6), gap="0.5rem",
+            ),
+            multi("c_esc", "Escuela profesional"),
+            ui.input_checkbox_group("c_tipo", "Actividades que cuentan para el indicador",
+                                    choices=TIPOS_CURRICULA, selected=TIPOS_CURRICULA),
+            ui.input_action_button("c_reset", "Limpiar filtros", class_="btn-outline-secondary btn-sm"),
+            width=290,
+        ),
+        ui.layout_column_wrap(
+            kpi("% de alumnos con actividad internacional", "c_kpi_pct", "c_kpi_pct_nota"),
+            kpi("Alumnos con actividad internacional", "c_kpi_num", "c_kpi_num_nota"),
+            kpi("Matriculados (denominador)", "c_kpi_den", "c_kpi_den_nota"),
+            width=1 / 3, fill=False,
+        ),
+        ui.layout_column_wrap(
+            kpi("Alumnos en clases espejo", "c_kpi_ce", "c_kpi_ce_nota"),
+            kpi("Alumnos en COIL", "c_kpi_coil", "c_kpi_coil_nota"),
+            kpi("Alumnos con profesor visitante", "c_kpi_pv", "c_kpi_pv_nota"),
+            width=1 / 3, fill=False,
+        ),
+        ui.div(
+            ui.strong("¿Cómo se calcula? "),
+            "Para cada periodo y escuela: alumnos únicos que participaron en al menos una actividad "
+            "internacional (en cualquiera de sus cursos y grupos) ÷ alumnos matriculados según el Portal de "
+            "Transparencia UCSP. Si se elige un rango de periodos, se suman matriculados y participantes de "
+            "cada periodo (alumno-semestre): un alumno con actividad en dos periodos cuenta en cada uno. "
+            "Un alumno con más de un tipo de actividad aparece en cada tipo, pero en el indicador cuenta una vez.",
+            class_="alert alert-light border small mb-3",
+        ),
+        tarjeta("% de alumnos con actividad internacional por periodo", ui.output_ui("c_g_pct")),
+        tarjeta("Alumnos por tipo de actividad y periodo", ui.output_ui("c_g_tipo"),
+                "Un alumno puede figurar en más de un tipo."),
+        tarjeta("Detalle por periodo", ui.output_data_frame("c_tabla_per"),
+                "'En base' = alumnos únicos de la escuela en la base (solo referencia; no se usa como denominador "
+                "salvo que falte el dato de Transparencia)."),
+        ui.layout_columns(
+            tarjeta("Cursos con más alumnos participantes (top 15)", ui.output_ui("c_g_curso")),
+            tarjeta("Participaciones por línea del curso", ui.output_ui("c_g_linea"),
+                    "Participación = un alumno en un curso con actividad internacional."),
+            col_widths=(6, 6),
+        ),
+        tarjeta(
+            ui.div(ui.span("Detalle por curso y grupo"),
+                   ui.download_button("c_descargar", "Descargar (CSV)", class_="btn-sm btn-outline-secondary ms-auto"),
+                   class_="d-flex align-items-center gap-2"),
+            ui.output_data_frame("c_tabla_grupo"),
+            "Sin datos personales: se muestra el número de alumnos por curso y grupo, no el listado de alumnos.",
+        ),
+    ),
+)
+
 panel_docentes = ui.nav_panel(
     "Indicadores de Docentes",
     # Aquí se pueden agregar más subpestañas de docentes junto a panel_curricula
@@ -614,7 +779,7 @@ panel_docentes = ui.nav_panel(
 app_ui = ui.page_navbar(
     ui.nav_panel(
         "Indicadores de Alumnos",
-        ui.navset_underline(panel_saliente, panel_entrante, id="sub_alumnos"),
+        ui.navset_underline(panel_saliente, panel_entrante, panel_curr_alumnos, id="sub_alumnos"),
     ),
     panel_docentes,
     ui.nav_spacer(),
@@ -637,7 +802,7 @@ app_ui = ui.page_navbar(
         #sub_alumnos .nav-link, #sub_docentes .nav-link { color:#52514e !important; font-weight:500; }
         #sub_alumnos .nav-link.active, #sub_docentes .nav-link.active { color:#0b2545 !important; border-bottom-color:#0b2545; }
         .card-header .form-group { margin-bottom: 0; }
-        #d_detalle td { white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
+        #d_detalle td, #c_tabla_grupo td, #c_tabla_per td { white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
     """)),
 )
 
@@ -710,6 +875,7 @@ def server(input, output, session):
                  "s_con": "Concepto", "s_pais": "País", "s_uni": "Universidad de destino"}
     FILTROS_E = {"e_car": "Carrera", "e_pais": "País", "e_uni": "Universidad de Origen",
                  "e_conv": "Convenio"}
+    FILTROS_C = {"c_esc": "Escuela"}
     FILTROS_D = {"d_car": "Carrera", "d_tipo": "Tipo", "d_mod": "Modalidad", "d_dic": "Dictado",
                  "d_pais": "País", "d_uni": "Universidad", "d_prof": "Profesor UCSP",
                  "d_lin": "Línea del curso", "d_est": "Estado"}
@@ -727,7 +893,7 @@ def server(input, output, session):
             ui.update_select(f"{pre}_desde", choices=per, selected=desde)
             ui.update_select(f"{pre}_hasta", choices=per, selected=hasta)
 
-    primera_vez = {"s": True, "d": True}
+    primera_vez = {"s": True, "d": True, "c": True}
 
     @reactive.effect
     def _():
@@ -790,6 +956,172 @@ def server(input, output, session):
                     Convenio=("Convenio", lambda s: ", ".join(sorted(s.dropna().unique()))))
                .reset_index().sort_values("Estudiantes", ascending=False))
         return render.DataGrid(t, filters=True, width="100%", height="420px")
+
+    # ============ CURRÍCULA (ALUMNOS) ============
+    @reactive.calc
+    def cur():
+        c = req(datos())[4]
+        req(c is not None)
+        return c
+
+    @render.ui
+    def c_aviso():
+        r = datos()
+        if r is not None and r[5]:
+            return ui.div(r[5], class_="alert alert-warning m-3")
+
+    @reactive.effect
+    def _():
+        base, _m = cur()
+        with reactive.isolate():
+            _poblar(base, FILTROS_C, "c", limpiar=primera_vez["c"])
+        primera_vez["c"] = False
+
+    @reactive.effect
+    @reactive.event(input.c_reset)
+    def _():
+        _poblar(cur()[0], FILTROS_C, "c", limpiar=True)
+        ui.update_checkbox_group("c_tipo", selected=TIPOS_CURRICULA)
+
+    @reactive.calc
+    def c_base():
+        base, _m = cur()
+        return _filtrar(base, input.c_desde(), input.c_hasta(),
+                        {col: input[id_]() for id_, col in FILTROS_C.items()})
+
+    @reactive.calc
+    def c_res():
+        tipos = list(input.c_tipo()) or TIPOS_CURRICULA
+        return resumen_curricula(c_base(), cur()[1], tipos)
+
+    def _tot(col):
+        return int(c_res()[col].sum())
+
+    def _pct(n):
+        den = _tot("Matriculados")
+        return f"{n / den:.1%}" if den else "—"
+
+    @render.text
+    def c_kpi_pct():
+        return _pct(_tot("Con actividad"))
+    @render.text
+    def c_kpi_pct_nota():
+        n = c_res()["Periodo"].nunique()
+        return "Periodo único" if n == 1 else f"{n} periodos sumados (alumno-semestre)"
+    @render.text
+    def c_kpi_num(): return f"{_tot('Con actividad'):,}"
+    @render.text
+    def c_kpi_num_nota(): return "Alumnos únicos por periodo"
+    @render.text
+    def c_kpi_den(): return f"{_tot('Matriculados'):,}"
+    @render.text
+    def c_kpi_den_nota():
+        r = c_res()
+        return ("Incluye respaldo de la base en algún periodo"
+                if (r["Fuente"] != "Transparencia UCSP").any() else "Fuente: Transparencia UCSP")
+    @render.text
+    def c_kpi_ce(): return f"{_tot('Clase Espejo'):,}"
+    @render.text
+    def c_kpi_ce_nota(): return f"{_pct(_tot('Clase Espejo'))} de los matriculados"
+    @render.text
+    def c_kpi_coil(): return f"{_tot('COIL'):,}"
+    @render.text
+    def c_kpi_coil_nota(): return f"{_pct(_tot('COIL'))} de los matriculados"
+    @render.text
+    def c_kpi_pv(): return f"{_tot('Profesor Visitante'):,}"
+    @render.text
+    def c_kpi_pv_nota(): return f"{_pct(_tot('Profesor Visitante'))} de los matriculados"
+
+    @render.ui
+    def c_g_pct():
+        r = c_res()
+        if r.empty:
+            return _html(_vacio())
+        fig = go.Figure()
+        escuelas = ["Administración de Negocios", "Contabilidad"]
+        escuelas += sorted(e for e in r["Escuela"].unique() if e not in escuelas)
+        for i, e in enumerate(x for x in escuelas if x in set(r["Escuela"])):
+            d = r[r["Escuela"] == e]
+            fig.add_bar(x=d["Periodo"], y=d["%"], name=e,
+                        marker=dict(color=PALETA[i % len(PALETA)], cornerradius=4),
+                        text=[f"{v:.1%}" for v in d["%"]], textposition="outside", cliponaxis=False,
+                        textfont=dict(color=TINTA_2),
+                        customdata=d[["Con actividad", "Matriculados"]].values,
+                        hovertemplate=f"<b>{e}</b> · %{{x}}<br>%{{y:.1%}} "
+                                      "(%{customdata[0]:,} de %{customdata[1]:,})<extra></extra>")
+        fig = _base(fig, 360)
+        fig.update_layout(barmode="group")
+        fig.update_xaxes(type="category", showgrid=False)
+        fig.update_yaxes(tickformat=".0%", rangemode="tozero", title_text="% de matriculados")
+        return _html(fig)
+
+    @render.ui
+    def c_g_tipo():
+        r = c_res()
+        if r.empty:
+            return _html(_vacio())
+        t = r.groupby("Periodo")[TIPOS_CURRICULA].sum()
+        fig = go.Figure()
+        for i, tipo in enumerate(TIPOS_CURRICULA):
+            fig.add_bar(x=t.index, y=t[tipo], name=tipo,
+                        marker=dict(color=PALETA[i + 2], cornerradius=4),
+                        text=t[tipo], textposition="outside", cliponaxis=False, textfont=dict(color=TINTA_2),
+                        hovertemplate=f"<b>{tipo}</b> · %{{x}}<br>%{{y:,}} alumnos<extra></extra>")
+        fig = _base(fig, 340)
+        fig.update_layout(barmode="group")
+        fig.update_xaxes(type="category", showgrid=False)
+        fig.update_yaxes(title_text="Alumnos")
+        return _html(fig)
+
+    @render.data_frame
+    def c_tabla_per():
+        r = c_res()
+        t = r[["Periodo", "Escuela", "Matriculados", "Con actividad", "%", "En base"] + TIPOS_CURRICULA + ["Fuente"]].copy()
+        t["%"] = t["%"].map(lambda v: f"{v:.1%}")
+        t = t.rename(columns={"Matriculados": "Matriculados (denominador)", "%": "% con actividad"})
+        return render.DataGrid(t, width="100%", height="360px")
+
+    def _act_filtrada():
+        b = c_base()
+        tipos = list(input.c_tipo()) or TIPOS_CURRICULA
+        return b[b[tipos].any(axis=1)]
+
+    @render.ui
+    def c_g_curso():
+        a = _act_filtrada()
+        if a.empty:
+            return _html(_vacio())
+        c = a.groupby("Curso")["ID"].nunique().sort_values().tail(15)
+        fig = go.Figure(go.Bar(x=c.values, y=c.index, orientation="h",
+                               marker=dict(color=AZUL, cornerradius=4), text=c.values,
+                               textposition="outside", cliponaxis=False, textfont=dict(color=TINTA_2),
+                               hovertemplate="<b>%{y}</b><br>%{x} alumnos<extra></extra>"))
+        fig = _base(fig, max(220, 30 * len(c) + 40))
+        fig.update_xaxes(showgrid=False, showticklabels=False)
+        fig.update_yaxes(showgrid=False, automargin=True)
+        return _html(fig)
+
+    @render.ui
+    def c_g_linea():
+        return _html(barras_h(_act_filtrada(), "Línea", AZUL, top=12, etiqueta="participaciones", sin_vacios=True))
+
+    def _tabla_grupos():
+        a = _act_filtrada()
+        if a.empty:
+            return pd.DataFrame(columns=["Periodo", "Escuela", "Curso", "Grupo", "Profesor", "Línea",
+                                         "Tipo de actividad", "Alumnos"])
+        t = (a.groupby(["Periodo", "Escuela", "Curso", "Grupo", "Profesor", "Línea", "Tipo"])["ID"]
+               .nunique().rename("Alumnos").reset_index()
+               .rename(columns={"Tipo": "Tipo de actividad"}))
+        return t.sort_values(["Periodo", "Escuela", "Curso", "Grupo"], ascending=[False, True, True, True])
+
+    @render.data_frame
+    def c_tabla_grupo():
+        return render.DataGrid(_tabla_grupos(), filters=True, width="100%", height="460px")
+
+    @render.download(filename=lambda: f"curricula_alumnos_por_grupo_{datetime.now():%Y%m%d}.csv")
+    def c_descargar():
+        yield _tabla_grupos().to_csv(index=False, sep=";").encode("utf-8-sig")
 
     # ============ DOCENTES ============
     @reactive.effect
