@@ -517,8 +517,8 @@ panel_entrante = ui.nav_panel(
     ),
 )
 
-panel_docentes = ui.nav_panel(
-    "Indicadores de Docentes",
+panel_curricula = ui.nav_panel(
+    "Internacionalización de la Currícula",
     ui.output_ui("d_aviso"),
     ui.layout_sidebar(
         ui.sidebar(
@@ -605,6 +605,12 @@ panel_docentes = ui.nav_panel(
     ),
 )
 
+panel_docentes = ui.nav_panel(
+    "Indicadores de Docentes",
+    # Aquí se pueden agregar más subpestañas de docentes junto a panel_curricula
+    ui.navset_underline(panel_curricula, id="sub_docentes"),
+)
+
 app_ui = ui.page_navbar(
     ui.nav_panel(
         "Indicadores de Alumnos",
@@ -627,9 +633,9 @@ app_ui = ui.page_navbar(
         .navbar .nav-link, .navbar-brand { color: #fff !important; }
         .navbar .nav-link.active { border-bottom: 2px solid #fff; }
         .navbar-brand { font-weight: 600; }
-        #sub_alumnos { padding: .75rem 1rem 0; background:#fff; border-bottom:1px solid #e7e6e2; }
-        #sub_alumnos .nav-link { color:#52514e !important; font-weight:500; }
-        #sub_alumnos .nav-link.active { color:#0b2545 !important; border-bottom-color:#0b2545; }
+        #sub_alumnos, #sub_docentes { padding: .75rem 1rem 0; background:#fff; border-bottom:1px solid #e7e6e2; }
+        #sub_alumnos .nav-link, #sub_docentes .nav-link { color:#52514e !important; font-weight:500; }
+        #sub_alumnos .nav-link.active, #sub_docentes .nav-link.active { color:#0b2545 !important; border-bottom-color:#0b2545; }
         .card-header .form-group { margin-bottom: 0; }
         #d_detalle td { white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
     """)),
