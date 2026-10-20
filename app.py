@@ -20,12 +20,12 @@ from pathlib import Path
 import pandas as pd
 import plotly
 import plotly.graph_objects as go
-from shiny import App, reactive, render, ui
+from shiny import App, reactive, render, req, ui
 
 # ─────────────────────────────────────────────────────────────
 # CONFIGURACIÓN
 # ─────────────────────────────────────────────────────────────
-SHEET_ID = "1T3eqTIyYhKF-QxW-DCApkN29wCz_XXJVjB9yYLjLuUo"
+SHEET_ID = "1CXiqec_6Wwf6nKs92cHKbLnzdjr3f3J1D0B3IdnYqFk"
 HOJA_SALIENTE = "MOVILIDAD SALIENTE"
 HOJA_ENTRANTE = "MOVILIDAD ENTRANTE"
 
@@ -56,15 +56,21 @@ def _descargar_libro() -> tuple[bytes, str]:
         gc = gspread.service_account_from_dict(json.loads(cred))
         return gc.open_by_key(SHEET_ID).export(ExportFormat.EXCEL), "Google Drive (cuenta de servicio)"
     # 2) Enlace público ("Cualquier persona con el enlace puede ver")
+    problema = None
     try:
         with urllib.request.urlopen(URL_XLSX, timeout=25) as r:
             contenido = r.read()
         if contenido[:2] == b"PK":          # un .xlsx real empieza por "PK"
             return contenido, "Google Drive"
+        problema = ("Google no entregó la hoja: revisa que esté compartida como "
+                    "'Cualquier persona con el enlace → Lector' y que el SHEET_ID sea correcto.")
     except Exception as e:
-        print("No se pudo leer Google Drive:", e)
+        problema = f"No se pudo conectar con Google Drive ({e}). Revisa el SHEET_ID y que la hoja esté compartida."
+    print(problema)
     # 3) Copia local
-    return ARCHIVO_LOCAL.read_bytes(), "copia local (sin conexión a Drive)"
+    if ARCHIVO_LOCAL.exists():
+        return ARCHIVO_LOCAL.read_bytes(), "copia local (sin conexión a Drive)"
+    raise RuntimeError(problema)
 
 
 def _limpiar_texto(df: pd.DataFrame) -> pd.DataFrame:
@@ -118,7 +124,19 @@ ISO3 = {_sin_tildes(k): v for k, v in {
 
 def cargar_datos():
     contenido, fuente = _descargar_libro()
-    hojas = pd.read_excel(io.BytesIO(contenido), sheet_name=[HOJA_SALIENTE, HOJA_ENTRANTE])
+    libro = pd.ExcelFile(io.BytesIO(contenido))
+    faltan = [h for h in (HOJA_SALIENTE, HOJA_ENTRANTE) if h not in libro.sheet_names]
+    if faltan:
+        raise RuntimeError(f"No encuentro la(s) pestaña(s) {', '.join(faltan)}. "
+                           f"Pestañas en la hoja: {', '.join(libro.sheet_names)}. "
+                           "Los nombres deben coincidir exactamente (mayúsculas y espacios).")
+    hojas = {h: libro.parse(h) for h in (HOJA_SALIENTE, HOJA_ENTRANTE)}
+    for h, cols in {HOJA_SALIENTE: ["Esc. Prof. UCSP", "Per. Acad.", "País"],
+                    HOJA_ENTRANTE: ["Periodo", "Carrera", "País"]}.items():
+        falt = [c for c in cols if c not in hojas[h].columns]
+        if falt:
+            raise RuntimeError(f"En la pestaña {h} faltan las columnas: {', '.join(falt)}. "
+                               f"Columnas encontradas: {', '.join(map(str, hojas[h].columns))}.")
 
     # --- Saliente ---
     sal = hojas[HOJA_SALIENTE].copy()
@@ -369,7 +387,7 @@ app_ui = ui.page_navbar(
     title="Movilidad Estudiantil · UCSP",
     footer=ui.div(ui.output_text("estado"), class_="text-muted small px-4 py-2"),
     fillable=False,
-    header=ui.TagList(ui.head_content(ui.tags.script(src="plotlyjs/plotly.min.js")), ui.tags.style("""
+    header=ui.TagList(ui.output_ui("aviso"), ui.head_content(ui.tags.script(src="plotlyjs/plotly.min.js")), ui.tags.style("""
         body { background:#f6f6f3; }
         .bslib-value-box .value-box-value { font-size: 2rem; font-weight: 600; }
         .bslib-value-box .value-box-title { font-size: .85rem; color:#52514e; }
@@ -409,18 +427,34 @@ def _orden(df, cols):
 
 def server(input, output, session):
 
+    error = reactive.value(None)
+
     @reactive.calc
     def datos():
         input.recargar()                                   # botón manual
         reactive.invalidate_later(MINUTOS_RECARGA * 60)    # recarga automática
-        return cargar_datos()
+        try:
+            d = cargar_datos()
+            error.set(None)
+            return d
+        except Exception as e:
+            print("ERROR al cargar datos:", repr(e))
+            error.set(str(e))
+            return None
 
-    sal = reactive.calc(lambda: datos()[0])
-    ent = reactive.calc(lambda: datos()[1])
+    sal = reactive.calc(lambda: req(datos())[0])
+    ent = reactive.calc(lambda: req(datos())[1])
+
+    @render.ui
+    def aviso():
+        datos()
+        if error():
+            return ui.div(ui.strong("No se pudieron cargar los datos. "), error(),
+                          class_="alert alert-danger m-3")
 
     @render.text
     def estado():
-        _, _, fuente, t = datos()
+        _, _, fuente, t = req(datos())
         return f"Fuente: {fuente} · Última actualización: {t:%d/%m/%Y %H:%M} · Se actualiza cada {MINUTOS_RECARGA} min."
 
     # ----- Opciones de los filtros (se actualizan con los datos) -----
