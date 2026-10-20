@@ -379,12 +379,16 @@ panel_entrante = ui.nav_panel(
 )
 
 app_ui = ui.page_navbar(
-    panel_saliente,
-    panel_entrante,
+    ui.nav_panel(
+        "Indicadores de Alumnos",
+        ui.navset_underline(panel_saliente, panel_entrante, id="sub_alumnos"),
+    ),
+    # Aquí se pueden agregar más pestañas principales en el futuro (p. ej. "Indicadores de Docentes")
     ui.nav_spacer(),
     ui.nav_control(ui.input_action_button("recargar", "↻ Actualizar datos",
                                           class_="btn-sm btn-light")),
-    title="Movilidad Estudiantil · UCSP",
+    title="Indicadores de Internacionalización FCEE",
+    window_title="Indicadores de Internacionalización FCEE",
     footer=ui.div(ui.output_text("estado"), class_="text-muted small px-4 py-2"),
     fillable=False,
     header=ui.TagList(ui.output_ui("aviso"), ui.head_content(ui.tags.script(src="plotlyjs/plotly.min.js")), ui.tags.style("""
@@ -395,6 +399,10 @@ app_ui = ui.page_navbar(
         .navbar { background: #0b2545 !important; }
         .navbar .nav-link, .navbar-brand { color: #fff !important; }
         .navbar .nav-link.active { border-bottom: 2px solid #fff; }
+        .navbar-brand { font-weight: 600; }
+        #sub_alumnos { padding: .75rem 1rem 0; background:#fff; border-bottom:1px solid #e7e6e2; }
+        #sub_alumnos .nav-link { color:#52514e !important; font-weight:500; }
+        #sub_alumnos .nav-link.active { color:#0b2545 !important; border-bottom-color:#0b2545; }
         .card-header .form-group { margin-bottom: 0; }
     """)),
 )
