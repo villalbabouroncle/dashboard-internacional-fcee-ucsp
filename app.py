@@ -553,6 +553,15 @@ panel_docentes = ui.nav_panel(
                          ui.p("Según N° de alumnos ADM + CONT registrados", class_="small text-muted mb-0")),
             width=1 / 4, fill=False,
         ),
+        ui.div(
+            ui.strong("¿Cómo se cuentan las actividades? "),
+            "En los indicadores generales, cada actividad se cuenta una sola vez: si la misma actividad "
+            "(mismo docente, curso, grupo, fecha y universidad) está registrada para Administración y para "
+            "Contabilidad, cuenta como 1. El mismo curso dictado en grupos distintos (p. ej. ADM4-1 y ADM4-2) "
+            "cuenta como actividades separadas. En los conteos por carrera, una actividad compartida suma en "
+            "ambas carreras, igual que en el Resumen de Actividades.",
+            class_="alert alert-light border small mb-3",
+        ),
         tarjeta(
             ui.div(ui.span("Actividades por periodo académico"),
                    ui.div(ui.input_select("d_por", None, width="230px", choices={
