@@ -28,6 +28,12 @@ from shiny import App, reactive, render, req, ui
 SHEET_ID = "1T3eqTIyYhKF-QxW-DCApkN29wCz_XXJVjB9yYLjLuUo"
 HOJA_SALIENTE = "MOVILIDAD SALIENTE"
 HOJA_ENTRANTE = "MOVILIDAD ENTRANTE"
+HOJA_DOCENTES = "ACTIVIDADES DOCENTES"     # copia de la pestaña "Consoli" de la base docente
+
+# Docentes: nombres completos de las escuelas y tipos que cuentan para el indicador
+ESCUELAS = {"ADM": "Administración de Negocios", "CONT": "Contabilidad"}
+TIPOS_INDICADOR = ["Clase Espejo", "COIL", "Profesor Visitante"]
+TIPOS_PRINCIPALES = TIPOS_INDICADOR + ["Actividad Internacional", "Postulación"]
 
 # Descarga todo el libro como .xlsx (respeta los tipos de cada celda)
 URL_XLSX = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
@@ -38,7 +44,7 @@ ARCHIVO_LOCAL = Path(__file__).parent / "data" / "base.xlsx"
 MINUTOS_RECARGA = 10
 
 # Colores (azul = saliente, naranja = entrante; categorías en orden fijo)
-AZUL, NARANJA = "#2a78d6", "#eb6834"
+AZUL, NARANJA, VERDE = "#2a78d6", "#eb6834", "#178f65"
 PALETA = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100",
           "#e87ba4", "#008300", "#6250d6", "#e34948"]
 TINTA, TINTA_2, GRILLA = "#0b0b0b", "#52514e", "#e7e6e2"
@@ -119,7 +125,125 @@ ISO3 = {_sin_tildes(k): v for k, v in {
     "Portugal": "PRT", "Puerto Rico": "PRI", "Reino Unido": "GBR",
     "República Checa": "CZE", "República Dominicana": "DOM", "Suecia": "SWE",
     "Suiza": "CHE", "Taiwán": "TWN", "Uruguay": "URY", "Venezuela": "VEN",
+    "República de Corea": "KOR", "Indonesia": "IDN", "Estados Unidos de América": "USA",
 }.items()}
+
+
+# ─────────────────────────────────────────────────────────────
+# DOCENTES (pestaña ACTIVIDADES DOCENTES = columnas de "Consoli")
+# ─────────────────────────────────────────────────────────────
+_TIPOS_CANON = {_sin_tildes(t): t for t in [
+    "Clase Espejo", "COIL", "Profesor Visitante", "Actividad Internacional", "Postulación",
+    "Congreso Internacional", "Evento Internacional", "Proyecto Internacional", "Curso", "Charla"]}
+_NO_APLICA = {"n.a.", "na", "n/a", "-", "no aplica"}
+
+
+def _txt(v):
+    """Limpia espacios y saltos de línea; devuelve None si está vacío."""
+    if v is None or (isinstance(v, float) and pd.isna(v)) or v is pd.NA:
+        return None
+    if isinstance(v, (pd.Timestamp, datetime)):
+        return v.strftime("%d/%m/%Y")
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    t = re.sub(r"\s+", " ", str(v)).strip()
+    return t or None
+
+
+def _categoria(v, vacio="Sin información"):
+    t = _txt(v)
+    if t is None:
+        return vacio
+    if t.lower() in _NO_APLICA:
+        return "No aplica"
+    return t
+
+
+def _canon_tipo(v):
+    t = _categoria(v)
+    return _TIPOS_CANON.get(_sin_tildes(t), t[:1].upper() + t[1:])
+
+
+def _canon_dictado(v):
+    t = _categoria(v)
+    b = _sin_tildes(t)
+    if b.startswith("bilateral"):
+        return "Bilateral"
+    if b.startswith("unilateral"):
+        if "ida" in b.split("(")[-1]:
+            return "Unilateral (IDA)"
+        if "vuelta" in b:
+            return "Unilateral (VUELTA)"
+        if "ucsp" in b:
+            return "Unilateral (en UCSP)"
+        return "Unilateral (otro)"
+    return t
+
+
+def _canon_pais(v):
+    t = _categoria(v)
+    return {"eeuu": "Estados Unidos", "ee.uu.": "Estados Unidos", "usa": "Estados Unidos"}.get(t.lower(), t)
+
+
+def cargar_docentes(libro: pd.ExcelFile):
+    """Devuelve (filas, mensaje). filas = una fila por actividad y carrera (como en Consoli)."""
+    if HOJA_DOCENTES not in libro.sheet_names:
+        return None, (f"Aún no existe la pestaña {HOJA_DOCENTES} en la hoja del dashboard. "
+                      "Créala con la fórmula IMPORTRANGE indicada en el LEEME.")
+    d = libro.parse(HOJA_DOCENTES)
+    encabezados = " ".join(map(str, d.columns))
+    if re.search(r"#(VALUE|REF|N/A|NAME|ERROR)", encabezados):
+        return None, (f"La pestaña {HOJA_DOCENTES} muestra un error de fórmula ({encabezados.strip()}). "
+                      "Revisa la celda A1 de esa pestaña (puede pedir 'Permitir acceso').")
+    falt = [c for c in ["Escuela Profesional", "Semestre", "Tipo de actividad"] if c not in d.columns]
+    if falt:
+        return None, f"En la pestaña {HOJA_DOCENTES} faltan las columnas: {', '.join(falt)}."
+
+    # Por seguridad, se descartan correos y enlaces aunque vengan en la hoja
+    d = d.drop(columns=[c for c in ["N°", "Correo UCSP", "Correo electrónico", "Evidencias",
+                                    "Encuesta Satisfacción"] if c in d.columns])
+    d = d[d["Semestre"].notna() | d["Tipo de actividad"].notna()].copy()
+
+    def col(nombre):
+        return d[nombre] if nombre in d.columns else pd.Series([None] * len(d), index=d.index)
+
+    out = pd.DataFrame(index=d.index)
+    out["Periodo"] = col("Semestre").map(_normalizar_periodo).fillna("Sin información")
+    out["Carrera"] = col("Escuela Profesional").map(_categoria).map(lambda c: ESCUELAS.get(c, c))
+    out["Tipo"] = col("Tipo de actividad").map(_canon_tipo)
+    out["Profesor UCSP"] = col("Profesor UCSP").map(_categoria)
+    out["Curso"] = col("Curso").map(_categoria)
+    out["Grupo"] = col("Grupo").map(_categoria)
+    out["Línea del curso"] = col("Línea del curso").map(_categoria)
+    out["Fecha"] = col("Fecha de Realización").map(lambda v: _txt(v) or "")
+    out["Modalidad"] = col("Modalidad").map(_categoria)
+    out["Dictado"] = col("Dictado").map(_canon_dictado)
+    out["País"] = col("País Socio").map(_canon_pais)
+    out["Universidad"] = col("Universidad Contraparte").map(_categoria)
+    out["Par académico"] = col("Par Académico").map(lambda v: _txt(v) or "")
+    out["Descripción"] = col("Descripción de la actividad").map(lambda v: _txt(v) or "")
+    out["Estado"] = col("Estado").map(_categoria)
+    out["Alumnos ADM"] = pd.to_numeric(col("N° Alumnos ADM"), errors="coerce")
+    out["Alumnos CONT"] = pd.to_numeric(col("N° Alumnos CONT"), errors="coerce")
+    out["Tipo (gráfico)"] = out["Tipo"].where(out["Tipo"].isin(TIPOS_PRINCIPALES), "Otras actividades")
+    out["ISO3"] = out["País"].map(lambda p: ISO3.get(_sin_tildes(str(p))))
+    # Una misma actividad aparece una vez por carrera: se identifica para no contarla doble en totales
+    clave = ["Periodo", "Tipo", "Profesor UCSP", "Curso", "Grupo", "Universidad", "Descripción", "Fecha"]
+    out["ID"] = out.groupby(clave, dropna=False, sort=False).ngroup()
+    return out.reset_index(drop=True), None
+
+
+def actividades_unicas(filas: pd.DataFrame) -> pd.DataFrame:
+    """Una fila por actividad (une las carreras que la comparten)."""
+    if filas.empty:
+        return filas.assign(Carreras=pd.Series(dtype=str), Alumnos=pd.Series(dtype=float))
+    g = filas.groupby("ID", sort=False)
+    act = g.first()
+    act["Carreras"] = g["Carrera"].agg(lambda s: ", ".join(sorted(set(s))))
+    alumnos = g["Alumnos ADM"].max().fillna(0) + g["Alumnos CONT"].max().fillna(0)
+    sin_dato = g["Alumnos ADM"].max().isna() & g["Alumnos CONT"].max().isna()
+    act["Alumnos"] = alumnos.mask(sin_dato)
+    return act.reset_index()
 
 
 def cargar_datos():
@@ -133,6 +257,12 @@ def cargar_datos():
     hojas = {h: libro.parse(h) for h in (HOJA_SALIENTE, HOJA_ENTRANTE)}
     for h, cols in {HOJA_SALIENTE: ["Esc. Prof. UCSP", "Per. Acad.", "País"],
                     HOJA_ENTRANTE: ["Periodo", "Carrera", "País"]}.items():
+        encabezados = " ".join(map(str, hojas[h].columns))
+        if re.search(r"#(VALUE|REF|N/A|NAME|ERROR)", encabezados) or hojas[h].empty and "#" in encabezados:
+            raise RuntimeError(
+                f"La pestaña {h} de la hoja del dashboard muestra un error de fórmula ({encabezados.strip()}). "
+                "Abre esa hoja en Google Sheets, pasa el mouse sobre la celda A1 de esa pestaña para ver el detalle "
+                "y revisa que la base original no haya cambiado (nombre de la pestaña, columnas eliminadas o movidas).")
         falt = [c for c in cols if c not in hojas[h].columns]
         if falt:
             raise RuntimeError(f"En la pestaña {h} faltan las columnas: {', '.join(falt)}. "
@@ -164,7 +294,12 @@ def cargar_datos():
         df["Año"] = pd.to_numeric(df["Periodo"].str[:4], errors="coerce")
         df["ISO3"] = df["País"].map(lambda p: ISO3.get(_sin_tildes(str(p))))
 
-    return sal, ent, fuente, datetime.now()
+    try:
+        doc, doc_msg = cargar_docentes(libro)
+    except Exception as e:                       # un problema en docentes no tumba lo de alumnos
+        doc, doc_msg = None, f"No se pudo leer la pestaña {HOJA_DOCENTES}: {e}"
+
+    return sal, ent, doc, doc_msg, fuente, datetime.now()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -191,7 +326,10 @@ def _vacio(msg="Sin datos para los filtros elegidos") -> go.Figure:
     return _base(fig, 300)
 
 
-def barras_h(df: pd.DataFrame, col: str, color: str, top: int | None = None, etiqueta="movilidades"):
+def barras_h(df: pd.DataFrame, col: str, color: str, top: int | None = None, etiqueta="movilidades",
+             sin_vacios=False):
+    if sin_vacios:   # en rankings no tiene sentido mostrar "Sin información" / "No aplica"
+        df = df[~df[col].isin(["Sin información", "No aplica"])]
     if df.empty:
         return _vacio()
     c = df[col].value_counts()
@@ -262,6 +400,7 @@ def _html(fig: go.Figure):
 
 ESCALA_AZUL = [[0, "#d6e6f8"], [1, "#0d4a96"]]
 ESCALA_NARANJA = [[0, "#fde0d2"], [1, "#a8380f"]]
+ESCALA_VERDE = [[0, "#d3f0e3"], [1, "#0b5e40"]]
 
 # ─────────────────────────────────────────────────────────────
 # INTERFAZ
@@ -378,12 +517,91 @@ panel_entrante = ui.nav_panel(
     ),
 )
 
+panel_docentes = ui.nav_panel(
+    "Indicadores de Docentes",
+    ui.output_ui("d_aviso"),
+    ui.layout_sidebar(
+        ui.sidebar(
+            ui.layout_columns(
+                ui.input_select("d_desde", "Periodo desde", choices=[]),
+                ui.input_select("d_hasta", "Periodo hasta", choices=[]),
+                col_widths=(6, 6), gap="0.5rem",
+            ),
+            multi("d_car", "Carrera"),
+            multi("d_tipo", "Tipo de actividad"),
+            multi("d_mod", "Modalidad"),
+            multi("d_dic", "Dictado"),
+            multi("d_pais", "País socio"),
+            multi("d_uni", "Universidad contraparte"),
+            multi("d_prof", "Docente UCSP"),
+            multi("d_lin", "Línea del curso"),
+            multi("d_est", "Estado"),
+            ui.input_action_button("d_reset", "Limpiar filtros", class_="btn-outline-secondary btn-sm"),
+            width=290,
+        ),
+        ui.layout_column_wrap(
+            ui.value_box("Actividades del indicador", ui.output_text("d_kpi_ind"),
+                         ui.p("Clase Espejo + COIL + Profesor Visitante", class_="small text-muted mb-0")),
+            ui.value_box("Clases espejo", ui.output_text("d_kpi_ce")),
+            ui.value_box("COIL", ui.output_text("d_kpi_coil")),
+            ui.value_box("Profesores visitantes", ui.output_text("d_kpi_pv")),
+            ui.value_box("Otras actividades", ui.output_text("d_kpi_otras"),
+                         ui.p("Actividad internacional, postulación, congresos…", class_="small text-muted mb-0")),
+            ui.value_box("Docentes UCSP participantes", ui.output_text("d_kpi_doc")),
+            ui.value_box("Universidades socias", ui.output_text("d_kpi_uni")),
+            ui.value_box("Alumnos participantes", ui.output_text("d_kpi_alu"),
+                         ui.p("Según N° de alumnos ADM + CONT registrados", class_="small text-muted mb-0")),
+            width=1 / 4, fill=False,
+        ),
+        tarjeta(
+            ui.div(ui.span("Actividades por periodo académico"),
+                   ui.div(ui.input_select("d_por", None, width="230px", choices={
+                       "Tipo (gráfico)": "por Tipo de actividad", "Carrera": "por Carrera",
+                       "Modalidad": "por Modalidad", "Dictado": "por Dictado", "": "Sin desagregar"}),
+                          class_="ms-auto"),
+                   class_="d-flex align-items-center gap-2"),
+            ui.output_ui("d_g_periodo"),
+            "Cada actividad se cuenta una vez. Al desagregar por carrera, una actividad compartida por ADM y CONT "
+            "se cuenta en ambas (igual que en el Resumen de Actividades).",
+        ),
+        tarjeta("Resumen de actividades por carrera y periodo", ui.output_data_frame("d_resumen"),
+                "Mismo cálculo que la pestaña 'Resumen Actividades': número de actividades por carrera, "
+                "tipo y periodo. La fila Total suma Clase Espejo + COIL + Profesor Visitante."),
+        ui.layout_columns(
+            tarjeta("Países socios", ui.output_ui("d_g_mapa")),
+            tarjeta("Actividades por país socio", ui.output_ui("d_g_pais")),
+            col_widths=(7, 5),
+        ),
+        ui.layout_columns(
+            tarjeta("Top 15 universidades contraparte", ui.output_ui("d_g_uni")),
+            tarjeta("Docentes UCSP con más actividades (top 15)", ui.output_ui("d_g_prof")),
+            col_widths=(6, 6),
+        ),
+        ui.layout_columns(
+            tarjeta("Por tipo de actividad", ui.output_ui("d_g_tipo")),
+            tarjeta("Por línea del curso", ui.output_ui("d_g_lin")),
+            col_widths=(6, 6),
+        ),
+        ui.layout_columns(
+            tarjeta("Por modalidad", ui.output_ui("d_g_mod")),
+            tarjeta("Por dictado", ui.output_ui("d_g_dic")),
+            col_widths=(6, 6),
+        ),
+        tarjeta(
+            ui.div(ui.span("Detalle de actividades"),
+                   ui.download_button("d_descargar", "Descargar (CSV)", class_="btn-sm btn-outline-secondary ms-auto"),
+                   class_="d-flex align-items-center gap-2"),
+            ui.output_data_frame("d_detalle"),
+        ),
+    ),
+)
+
 app_ui = ui.page_navbar(
     ui.nav_panel(
         "Indicadores de Alumnos",
         ui.navset_underline(panel_saliente, panel_entrante, id="sub_alumnos"),
     ),
-    # Aquí se pueden agregar más pestañas principales en el futuro (p. ej. "Indicadores de Docentes")
+    panel_docentes,
     ui.nav_spacer(),
     ui.nav_control(ui.input_action_button("recargar", "↻ Actualizar datos",
                                           class_="btn-sm btn-light")),
@@ -404,6 +622,7 @@ app_ui = ui.page_navbar(
         #sub_alumnos .nav-link { color:#52514e !important; font-weight:500; }
         #sub_alumnos .nav-link.active { color:#0b2545 !important; border-bottom-color:#0b2545; }
         .card-header .form-group { margin-bottom: 0; }
+        #d_detalle td { white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
     """)),
 )
 
@@ -453,6 +672,12 @@ def server(input, output, session):
     sal = reactive.calc(lambda: req(datos())[0])
     ent = reactive.calc(lambda: req(datos())[1])
 
+    @reactive.calc
+    def doc():
+        d = req(datos())[2]
+        req(d is not None)          # si falta la pestaña de docentes, solo esa sección queda vacía
+        return d
+
     @render.ui
     def aviso():
         datos()
@@ -462,7 +687,7 @@ def server(input, output, session):
 
     @render.text
     def estado():
-        _, _, fuente, t = req(datos())
+        *_, fuente, t = req(datos())
         return f"Fuente: {fuente} · Última actualización: {t:%d/%m/%Y %H:%M} · Se actualiza cada {MINUTOS_RECARGA} min."
 
     # ----- Opciones de los filtros (se actualizan con los datos) -----
@@ -470,6 +695,9 @@ def server(input, output, session):
                  "s_con": "Concepto", "s_pais": "País", "s_uni": "Universidad de destino"}
     FILTROS_E = {"e_car": "Carrera", "e_pais": "País", "e_uni": "Universidad de Origen",
                  "e_conv": "Convenio"}
+    FILTROS_D = {"d_car": "Carrera", "d_tipo": "Tipo", "d_mod": "Modalidad", "d_dic": "Dictado",
+                 "d_pais": "País", "d_uni": "Universidad", "d_prof": "Profesor UCSP",
+                 "d_lin": "Línea del curso", "d_est": "Estado"}
 
     def _poblar(df, filtros, pre, limpiar=False):
         for id_, col in filtros.items():
@@ -484,7 +712,7 @@ def server(input, output, session):
             ui.update_select(f"{pre}_desde", choices=per, selected=desde)
             ui.update_select(f"{pre}_hasta", choices=per, selected=hasta)
 
-    primera_vez = {"s": True}
+    primera_vez = {"s": True, "d": True}
 
     @reactive.effect
     def _():
@@ -547,6 +775,134 @@ def server(input, output, session):
                     Convenio=("Convenio", lambda s: ", ".join(sorted(s.dropna().unique()))))
                .reset_index().sort_values("Estudiantes", ascending=False))
         return render.DataGrid(t, filters=True, width="100%", height="420px")
+
+    # ============ DOCENTES ============
+    @reactive.effect
+    def _():
+        d = doc()
+        with reactive.isolate():
+            _poblar(d, FILTROS_D, "d", limpiar=primera_vez["d"])
+        primera_vez["d"] = False
+
+    @reactive.effect
+    @reactive.event(input.d_reset)
+    def _():
+        _poblar(doc(), FILTROS_D, "d", limpiar=True)
+
+    @render.ui
+    def d_aviso():
+        r = datos()
+        if r is not None and r[2] is None:
+            return ui.div(r[3], class_="alert alert-warning m-3")
+
+    @reactive.calc
+    def d_filas():
+        return _filtrar(doc(), input.d_desde(), input.d_hasta(),
+                        {col: input[id_]() for id_, col in FILTROS_D.items()})
+
+    @reactive.calc
+    def d_act():
+        return actividades_unicas(d_filas())
+
+    def _n_tipo(tipos):
+        a = d_act()
+        return f"{int(a['Tipo'].isin(tipos).sum()):,}"
+
+    @render.text
+    def d_kpi_ind(): return _n_tipo(TIPOS_INDICADOR)
+    @render.text
+    def d_kpi_ce(): return _n_tipo(["Clase Espejo"])
+    @render.text
+    def d_kpi_coil(): return _n_tipo(["COIL"])
+    @render.text
+    def d_kpi_pv(): return _n_tipo(["Profesor Visitante"])
+    @render.text
+    def d_kpi_otras():
+        a = d_act()
+        return f"{int((~a['Tipo'].isin(TIPOS_INDICADOR)).sum()):,}"
+    @render.text
+    def d_kpi_doc():
+        p = d_act()["Profesor UCSP"]
+        return str(p[~p.isin(["Sin información", "No aplica"])].nunique())
+    @render.text
+    def d_kpi_uni():
+        u = d_act()["Universidad"]
+        return str(u[~u.isin(["Sin información", "No aplica"])].nunique())
+    @render.text
+    def d_kpi_alu():
+        return f"{int(d_act()['Alumnos'].sum()):,}"
+
+    @render.ui
+    def d_g_periodo():
+        por = input.d_por() or None
+        base = d_filas() if por == "Carrera" else d_act()
+        orden = {"Tipo (gráfico)": TIPOS_PRINCIPALES + ["Otras actividades"],
+                 **_orden(doc(), ["Carrera", "Modalidad", "Dictado"])}
+        fig = barras_periodo(base, VERDE, por, orden)
+        fig.update_yaxes(title_text="N.º de actividades")
+        if not por:
+            fig.update_traces(hovertemplate="<b>%{x}</b><br>%{y} actividades<extra></extra>")
+        return _html(fig)
+
+    @render.data_frame
+    def d_resumen():
+        f = d_filas()
+        f = f[f["Periodo"].str.match(r"^\d{4}-\d{2}$")]
+        if f.empty:
+            return render.DataGrid(pd.DataFrame({"Sin datos": []}))
+        tabla = pd.crosstab([f["Carrera"], f["Tipo"]], f["Periodo"])
+        tabla = tabla[sorted(tabla.columns, reverse=True)]          # periodo más reciente primero
+        bloques = []
+        for carrera in tabla.index.get_level_values(0).unique():
+            t = tabla.loc[carrera]
+            orden = [x for x in TIPOS_PRINCIPALES if x in t.index] + sorted(x for x in t.index if x not in TIPOS_PRINCIPALES)
+            t = t.reindex(orden)
+            t.loc["TOTAL (Clase Espejo + COIL + Prof. Visitante)"] = t.reindex(TIPOS_INDICADOR).fillna(0).sum()
+            t = t.reset_index().rename(columns={"index": "Tipo"})
+            t.insert(0, "Carrera", carrera)
+            bloques.append(t)
+        res = pd.concat(bloques, ignore_index=True)
+        res.columns = [str(c) for c in res.columns]
+        for c in res.columns[2:]:
+            res[c] = res[c].fillna(0).astype(int)
+        es_total = res["Tipo"].str.startswith("TOTAL")
+        estilos = [{"rows": res.index[es_total].tolist(),
+                    "style": {"font-weight": "600", "background-color": "#eef7f2"}}]
+        return render.DataGrid(res, width="100%", height="560px", styles=estilos)
+
+    @render.ui
+    def d_g_mapa(): return _html(mapa(d_act(), ESCALA_VERDE, "actividades"))
+    @render.ui
+    def d_g_pais(): return _html(barras_h(d_act(), "País", VERDE, top=20, etiqueta="actividades", sin_vacios=True))
+    @render.ui
+    def d_g_uni(): return _html(barras_h(d_act(), "Universidad", VERDE, top=15, etiqueta="actividades", sin_vacios=True))
+    @render.ui
+    def d_g_prof(): return _html(barras_h(d_act(), "Profesor UCSP", VERDE, top=15, etiqueta="actividades", sin_vacios=True))
+    @render.ui
+    def d_g_tipo(): return _html(barras_h(d_act(), "Tipo", VERDE, etiqueta="actividades"))
+    @render.ui
+    def d_g_lin(): return _html(barras_h(d_act(), "Línea del curso", VERDE, top=12, etiqueta="actividades", sin_vacios=True))
+    @render.ui
+    def d_g_mod(): return _html(barras_h(d_act(), "Modalidad", VERDE, etiqueta="actividades"))
+    @render.ui
+    def d_g_dic(): return _html(barras_h(d_act(), "Dictado", VERDE, etiqueta="actividades"))
+
+    def _tabla_detalle():
+        a = d_act()
+        cols = ["Periodo", "Carreras", "Tipo", "Profesor UCSP", "Curso", "Grupo", "Línea del curso",
+                "Fecha", "Modalidad", "Dictado", "País", "Universidad", "Par académico",
+                "Descripción", "Estado", "Alumnos"]
+        t = a[[c for c in cols if c in a.columns]].copy()
+        t["Alumnos"] = t["Alumnos"].map(lambda v: "" if pd.isna(v) else int(v))
+        return t.sort_values("Periodo", ascending=False, kind="stable")
+
+    @render.data_frame
+    def d_detalle():
+        return render.DataGrid(_tabla_detalle(), filters=True, width="100%", height="520px")
+
+    @render.download(filename=lambda: f"actividades_docentes_{datetime.now():%Y%m%d}.csv")
+    def d_descargar():
+        yield _tabla_detalle().to_csv(index=False, sep=";").encode("utf-8-sig")
 
     # ============ ENTRANTE ============
     @reactive.calc
