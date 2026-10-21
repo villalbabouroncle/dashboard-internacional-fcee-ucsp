@@ -1252,11 +1252,14 @@ def panel_ruta(k):
                     class_="filtros-ruta",
                 ),
                 ui.output_ui(f"hr_{pid}_estr"),
-                ui.p("Las barras comparan las metas de 2027, 2028 y 2029 de cada estrategia. Donde dice "
-                     "«Situación actual», el valor se calcula en vivo con los datos de este dashboard: movilidad "
-                     "saliente (estudiantes de la escuela en el último año con datos), % de alumnos con experiencias "
-                     "internacionales (último periodo de la currícula) y cursos con clase espejo, COIL o profesor "
-                     "visitante (último año con datos de la base docente).", class_="leyenda-suelta"),
+                ui.p("Las metas son anuales: cada meta se compara solo con lo logrado en ese mismo año, sin "
+                     "acumular años anteriores. En las estrategias medidas por el dashboard, «Logrado» se calcula en "
+                     "vivo: estudiantes de la escuela en movilidad saliente en el año; % de alumnos con experiencias "
+                     "internacionales en el año (alumnos únicos del año ÷ alumnos distintos de la base en el año; si "
+                     "solo hay un semestre, el % de ese semestre sobre los matriculados de Transparencia); y cursos "
+                     "distintos con clase espejo, COIL o profesor visitante en el año. «Parcial» indica un año en curso "
+                     "o con un solo semestre registrado. La «Referencia» muestra el último año previo a 2027, solo "
+                     "como punto de partida.", class_="leyenda-suelta"),
                 subtitulo="Filtra por objetivo o nivel. Cada tarjeta muestra el indicador, las metas por año y el responsable.",
             ),
             ui.p(f"Fuente: documento «Ruta de Internacionalización del Programa Profesional de {R['programa']}».",
@@ -1389,6 +1392,11 @@ app_ui = ui.page_navbar(
         .meta-val {{ font-size: 1.15rem; font-weight: 700; color:{T['tinta']}; }}
         .meta-barra {{ height: 6px; border-radius: 4px; background:{T['grilla']}; margin-top:.3rem; overflow:hidden; }}
         .meta-barra > div {{ height: 100%; border-radius: 4px; background:{T['acento']}; }}
+        .meta-real {{ font-size: .72rem; margin-top: .35rem; color:{T['tinta_2']}; }}
+        .meta-real.ok {{ color:#2fbf71; font-weight: 600; }}
+        .meta-real.no {{ color:#e3a008; font-weight: 600; }}
+        .meta-real.parcial {{ color:{T['tinta']}; }}
+        .meta-ok {{ box-shadow: inset 0 0 0 1px #2fbf71; }}
         .avance {{ border-radius: 10px; padding: .55rem .7rem; border: 1px dashed #2fbf71; font-size: .85rem; color:{T['tinta']}; }}
         .avance-barra {{ height: 8px; border-radius: 4px; background:{T['grilla']}; margin-top:.35rem; overflow:hidden; }}
         .avance-barra > div {{ height:100%; background:#2fbf71; border-radius: 4px; }}
@@ -1555,42 +1563,45 @@ def server(input, output, session):
     def _num(v):
         return float(str(v).replace("%", "").strip())
 
-    def _medida(k, medida):
-        """Valor actual de una meta medible: (valor, texto). None si no hay datos."""
+    def _valores_anuales(k, medida):
+        """Valor logrado en cada año calendario: {año: (valor, texto, parcial)}.
+        Las metas de las hojas de ruta son anuales, así que cada año se mide por separado (no se acumula).
+        'parcial' = año en curso o con un solo semestre registrado."""
         esc = RUTAS[k]["escuela"]
         anio_hoy = datetime.now().year
+        res = {}
         try:
             if medida == "movilidad":
                 s_ = sal()
-                s_ = s_[(s_["Esc. Prof. UCSP"] == esc) & (s_["Año"] <= anio_hoy)]
-                if s_.empty:
-                    return None
-                y = int(s_["Año"].max())
-                n = int((s_["Año"] == y).sum())
-                return n, f"{n} estudiantes en movilidad saliente en {y}"
-            if medida == "pct_curricula":
+                s_ = s_[(s_["Esc. Prof. UCSP"] == esc) & s_["Año"].notna()]
+                for y, g in s_.groupby(s_["Año"].astype(int)):
+                    n = len(g)
+                    res[y] = (n, f"{n}", y >= anio_hoy)
+            elif medida == "pct_curricula":
                 base, mat = cur()
-                r = resumen_curricula(base, mat)
-                r = r[(r["Escuela"] == esc) & r["Periodo"].str.match(r"^\d{4}-\d{2}$")]
-                if r.empty:
-                    return None
-                u = r.sort_values("Periodo").iloc[-1]
-                return u["%"] * 100, f"{u['%']:.1%} de alumnos con experiencias internacionales en {u['Periodo']}"
-            if medida == "cursos":
+                b = base[(base["Escuela"] == esc) & base["Periodo"].str.match(r"^\d{4}-\d{2}$")]
+                for y, g in b.groupby(b["Periodo"].str[:4].astype(int)):
+                    pers = sorted(g["Periodo"].unique())
+                    if len(pers) >= 2:      # año completo: alumnos únicos del año ÷ alumnos distintos del año
+                        pct = g.loc[g[TIPOS_CURRICULA].any(axis=1), "ID"].nunique() / max(g["ID"].nunique(), 1)
+                    else:                   # un solo semestre: % de ese semestre (denominador Transparencia)
+                        r = resumen_curricula(g, mat)
+                        pct = r["Con actividad"].sum() / max(r["Matriculados"].sum(), 1)
+                    res[y] = (pct * 100, f"{pct:.1%}", y >= anio_hoy or len(pers) < 2)
+            elif medida == "cursos":
                 d = doc()
                 d = d[(d["Carrera"] == esc) & d["Tipo"].isin(TIPOS_INDICADOR)
-                      & d["Periodo"].str.match(r"^\d{4}-\d{2}$")]
-                d = d[~d["Curso"].isin(["Sin información", "No aplica"])]
-                anios = d["Periodo"].str[:4].astype(int)
-                d = d[anios <= anio_hoy]
-                if d.empty:
-                    return None
-                y = int(d["Periodo"].str[:4].astype(int).max())
-                n = int(d.loc[d["Periodo"].str.startswith(str(y)), "Curso"].nunique())
-                return n, f"{n} cursos con clase espejo, COIL o profesor visitante en {y}"
+                      & d["Periodo"].str.match(r"^\d{4}-\d{2}$") & ~d["Curso"].isin(["Sin información", "No aplica"])]
+                for y, g in d.groupby(d["Periodo"].str[:4].astype(int)):
+                    n = int(g["Curso"].nunique())
+                    res[y] = (n, f"{n}", y >= anio_hoy or g["Periodo"].nunique() < 2)
         except Exception:
-            return None
-        return None
+            return {}
+        return res
+
+    _UNIDAD = {"movilidad": "estudiantes en movilidad saliente",
+               "pct_curricula": "de alumnos con experiencias internacionales",
+               "cursos": "cursos con clase espejo, COIL o profesor visitante"}
 
     def _estrategias(k):
         R = RUTAS[k]
@@ -1608,31 +1619,47 @@ def server(input, output, session):
                 continue
             nums = [_num(m) for m in metas]
             tope = max(nums) or 1
-            bloques_meta = [
-                ui.div(ui.div(f"Meta {2027 + i}", class_="meta-anio"), ui.div(m, class_="meta-val"),
-                       ui.div(ui.div(style=f"width:{v / tope * 100:.0f}%"), class_="meta-barra"), class_="meta")
-                for i, (m, v) in enumerate(zip(metas, nums))
-            ]
+            vals = _valores_anuales(k, medida) if medida else {}
+            bloques_meta = []
+            for i, (m, v) in enumerate(zip(metas, nums)):
+                anio = 2027 + i
+                logrado = None
+                clase = "meta"
+                if medida:
+                    if anio in vals:
+                        valor, txt, parcial = vals[anio]
+                        if parcial:
+                            logrado = ui.div(f"Logrado: {txt} (parcial)", class_="meta-real parcial")
+                        elif valor >= v:
+                            logrado = ui.div(f"Logrado: {txt} · cumplida", class_="meta-real ok")
+                            clase = "meta meta-ok"
+                        else:
+                            logrado = ui.div(f"Logrado: {txt} · no cumplida", class_="meta-real no")
+                    else:
+                        logrado = ui.div("Logrado: sin datos aún", class_="meta-real")
+                bloques_meta.append(ui.div(
+                    ui.div(f"Meta {anio}", class_="meta-anio"), ui.div(m, class_="meta-val"),
+                    ui.div(ui.div(style=f"width:{v / tope * 100:.0f}%"), class_="meta-barra"),
+                    logrado, class_=clase))
             tags = [ui.span(f"Objetivo {o}", class_="tag tag-obj"), ui.span(f"Nivel {nivel}", class_="tag tag-niv")]
-            avance = None
+            referencia = None
             if medida:
                 tags.append(ui.span("Medido en el dashboard", class_="tag tag-med"))
-                m = _medida(k, medida)
-                if m:
-                    valor, txt = m
-                    pct = valor / nums[0] * 100 if nums[0] else 0
-                    estado = "meta 2027 alcanzada" if pct >= 100 else f"{pct:.0f}% de la meta 2027"
-                    avance = ui.div(ui.strong("Situación actual: "), txt, f" · {estado}",
-                                    ui.div(ui.div(style=f"width:{min(pct, 100):.0f}%"), class_="avance-barra"),
-                                    class_="avance")
-                else:
-                    avance = ui.div("Situación actual: aún no hay datos para calcularla.", class_="avance")
+                previos = sorted(y for y in vals if y < 2027)
+                if previos:
+                    y = previos[-1]
+                    _, txt, parcial = vals[y]
+                    referencia = ui.div(
+                        ui.strong(f"Referencia {y}: "), f"{txt} {_UNIDAD[medida]}",
+                        " (año incompleto)" if parcial else "",
+                        ". Solo como punto de partida; no se compara con las metas.",
+                        class_="avance")
             tarjetas.append(ui.div(
                 ui.div(*tags, class_="estr-top"),
                 ui.p(texto, class_="estr-texto"),
                 ui.div(ui.strong("Indicador: "), indicador, class_="estr-ind"),
                 ui.div(*bloques_meta, class_="metas"),
-                avance,
+                referencia,
                 ui.div(ui.span(ui.strong("Responsable: "), resp),
                        ui.span(ui.strong("Observaciones: "), obs) if obs else None, class_="estr-pie"),
                 class_="estr-card",
