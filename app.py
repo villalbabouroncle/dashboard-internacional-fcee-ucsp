@@ -46,6 +46,13 @@ ARCHIVO_LOCAL = Path(__file__).parent / "data" / "base.xlsx"
 
 MINUTOS_RECARGA = 10
 
+# Torneo CompanyGame: base unificada (hoja aparte, compartida como "Cualquier persona con el enlace")
+CG_SHEET_ID = "1XI5cre6hGCRHsshf4hh9HlVCIdBu0QSTXknRY2wbURM"
+CG_ARCHIVO_LOCAL = Path(__file__).parent / "data" / "companygame.xlsx"
+CG_CATS = ["Administración", "Finanzas y Contabilidad", "Marketing"]
+CG_HITOS = ["Ingresó al sistema", "Plan de acción", "Ronda 1", "Ronda 2", "Ronda 3", "Ronda 4",
+            "Informe final", "Video final"]
+
 # ─────────────────────────────────────────────────────────────
 # TEMA DE COLORES  →  para cambiar el aspecto del dashboard, cambia solo esta línea:
 TEMA = os.environ.get("DASH_TEMA", "oscuro")    # opciones: marino, granate, oscuro, claro, cielo
@@ -91,7 +98,7 @@ TINTA, TINTA_2, GRILLA = T["tinta"], T["tinta_2"], T["grilla"]
 # ─────────────────────────────────────────────────────────────
 # CARGA DE DATOS
 # ─────────────────────────────────────────────────────────────
-def _descargar_libro() -> tuple[bytes, str]:
+def _descargar_libro(sheet_id: str = SHEET_ID, local: Path = ARCHIVO_LOCAL) -> tuple[bytes, str]:
     """Devuelve el .xlsx en bytes y el nombre de la fuente usada."""
     # 1) Cuenta de servicio (si la hoja es privada). Ver README.
     cred = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
@@ -99,11 +106,12 @@ def _descargar_libro() -> tuple[bytes, str]:
         import gspread
         from gspread.utils import ExportFormat
         gc = gspread.service_account_from_dict(json.loads(cred))
-        return gc.open_by_key(SHEET_ID).export(ExportFormat.EXCEL), "Google Drive (cuenta de servicio)"
+        return gc.open_by_key(sheet_id).export(ExportFormat.EXCEL), "Google Drive (cuenta de servicio)"
     # 2) Enlace público ("Cualquier persona con el enlace puede ver")
     problema = None
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
     try:
-        with urllib.request.urlopen(URL_XLSX, timeout=25) as r:
+        with urllib.request.urlopen(url, timeout=25) as r:
             contenido = r.read()
         if contenido[:2] == b"PK":          # un .xlsx real empieza por "PK"
             return contenido, "Google Drive"
@@ -113,8 +121,8 @@ def _descargar_libro() -> tuple[bytes, str]:
         problema = f"No se pudo conectar con Google Drive ({e}). Revisa el SHEET_ID y que la hoja esté compartida."
     print(problema)
     # 3) Copia local
-    if ARCHIVO_LOCAL.exists():
-        return ARCHIVO_LOCAL.read_bytes(), "copia local (sin conexión a Drive)"
+    if local.exists():
+        return local.read_bytes(), "copia local (sin conexión a Drive)"
     raise RuntimeError(problema)
 
 
@@ -533,6 +541,273 @@ def _html(fig: go.Figure):
     """Convierte la figura en HTML (usa plotly.js servido por la propia app)."""
     return ui.HTML(fig.to_html(full_html=False, include_plotlyjs=False,
                                config={"displaylogo": False, "responsive": True}))
+
+
+# ─────────────────────────────────────────────────────────────
+# TORNEO COMPANYGAME (base unificada aparte)
+# ─────────────────────────────────────────────────────────────
+_CG_HOJAS = ["UCSP_EDICIONES", "UCSP_CATEGORIAS", "TORNEO_GLOBAL", "EQUIPOS_HITOS", "RANKING_RONDAS",
+             "PARTICIPANTES", "COMPETENCIAS", "EQUIPOS_2024", "EQUIPOS_2025"]
+
+
+def _cg_num(df, cols):
+    for c in cols:
+        if c in df:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+    return df
+
+
+def cargar_companygame():
+    """Lee la base unificada CompanyGame. Encabezados en la fila 3; se descartan las notas al pie."""
+    contenido, fuente = _descargar_libro(CG_SHEET_ID, CG_ARCHIVO_LOCAL)
+    libro = pd.ExcelFile(io.BytesIO(contenido))
+    faltan = [h for h in _CG_HOJAS if h not in libro.sheet_names]
+    if faltan:
+        raise RuntimeError(f"En la base CompanyGame faltan las pestañas: {', '.join(faltan)}.")
+    d = {}
+    for h in _CG_HOJAS:
+        df = libro.parse(h, header=2)
+        df.columns = [str(c).strip() for c in df.columns]
+        df = _limpiar_texto(df)
+        if "Año" in df:
+            df["Año"] = pd.to_numeric(df["Año"], errors="coerce")
+            df = df[df["Año"].between(2000, 2100)].copy()
+            df["Año"] = df["Año"].astype(int)
+        else:
+            df = df[df["Categoría"].isin(CG_CATS)].copy()
+        d[h] = df
+    _cg_num(d["UCSP_EDICIONES"], [c for c in d["UCSP_EDICIONES"].columns if c != "Año"])
+    _cg_num(d["TORNEO_GLOBAL"], [c for c in d["TORNEO_GLOBAL"].columns if c != "Año"])
+    cat = d["UCSP_CATEGORIAS"]
+    _cg_num(cat, [c for c in cat.columns if c not in ("Año", "Categoría", "Nota")])
+    rr = d["RANKING_RONDAS"]
+    _cg_num(rr, [c for c in rr.columns if c not in ("Año", "Categoría", "Equipo")])
+    _cg_num(d["COMPETENCIAS"], ["Equipos clasificados", "Destacado %", "Satisfactorio %", "Suficiente %",
+                                "Insuficiente %", "Destacado + Satisfactorio %"])
+    e24 = d["EQUIPOS_2024"]
+    _cg_num(e24, [c for c in e24.columns if c not in ("Categoría", "Equipo", "Estado", "Entregó informe final")])
+    _cg_num(d["EQUIPOS_HITOS"], ["Integrantes", "Rondas completadas (de 4)"])
+    for c in CG_HITOS + ["Completó las 4 rondas"]:
+        d["EQUIPOS_HITOS"][c] = d["EQUIPOS_HITOS"][c].fillna("s/d")
+    return d, fuente, datetime.now()
+
+
+def _mezcla(c1: str, c2: str, t: float) -> str:
+    """Color intermedio entre c1 y c2 (t entre 0 y 1)."""
+    a = [int(c1[i:i + 2], 16) for i in (1, 3, 5)]
+    b = [int(c2[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#" + "".join(f"{round(x + (y - x) * t):02x}" for x, y in zip(a, b))
+
+
+COLOR_CAT = {c: PALETA[i] for i, c in enumerate(CG_CATS)}
+VERDE_OK, ROJO_NO = "#2fbf71", "#e66767"
+
+
+def _ordinal(v):
+    return "–" if pd.isna(v) else f"{int(v)}.º"
+
+
+def cg_participacion(ed: pd.DataFrame):
+    if ed.empty:
+        return _vacio()
+    fig = go.Figure()
+    tonos = [_mezcla(T["escala_s"][0], T["escala_s"][1], t) for t in (0.35, 0.65, 1.0)]
+    for col, nombre, color in zip(["Equipos inscritos", "Equipos activos", "Equipos clasificados"],
+                                  ["Inscritos", "Activos", "Clasificados"], tonos):
+        fig.add_bar(x=ed["Año"].astype(str), y=ed[col], name=nombre, marker=dict(color=color, cornerradius=4),
+                    text=ed[col].map(lambda v: "" if pd.isna(v) else int(v)), textposition="outside",
+                    cliponaxis=False, textfont=dict(color=TINTA_2),
+                    hovertemplate=f"<b>%{{x}}</b><br>{nombre}: %{{y}} equipos<extra></extra>")
+    fig = _base(fig, 340)
+    fig.update_layout(barmode="group", bargap=0.3, bargroupgap=0.08)
+    fig.update_xaxes(type="category", showgrid=False)
+    fig.update_yaxes(title_text="N.º de equipos UCSP")
+    return fig
+
+
+def cg_clasificacion(ed: pd.DataFrame):
+    d = ed.dropna(subset=["Clasificados / inscritos"])
+    if d.empty:
+        return _vacio()
+    x = d["Año"].astype(str)
+    fig = go.Figure()
+    fig.add_scatter(x=x, y=d["Clasificados / inscritos del torneo"], name="Promedio del torneo",
+                    mode="lines+markers", line=dict(color=TINTA_2, width=2, dash="dot"), marker=dict(size=7),
+                    hovertemplate="<b>%{x}</b><br>Torneo: %{y:.0%}<extra></extra>")
+    fig.add_scatter(x=x, y=d["Clasificados / inscritos"], name="UCSP", mode="lines+markers+text",
+                    line=dict(color=T["acento"], width=3), marker=dict(size=9),
+                    text=d["Clasificados / inscritos"].map(lambda v: f"{v:.0%}"), textposition="top center",
+                    textfont=dict(color=TINTA),
+                    hovertemplate="<b>%{x}</b><br>UCSP: %{y:.0%}<extra></extra>")
+    fig = _base(fig, 340)
+    fig.update_xaxes(type="category", showgrid=False)
+    fig.update_yaxes(tickformat=".0%", range=[0, 1.05], title_text="Equipos clasificados ÷ inscritos")
+    return fig
+
+
+def cg_posiciones(cat: pd.DataFrame, cats):
+    d = cat[cat["Categoría"].isin(cats)].dropna(subset=["Posición UCSP (ranking indexado)"])
+    if d.empty:
+        return _vacio("Sin posiciones publicadas para las categorías elegidas")
+    fig = go.Figure()
+    for c in [k for k in CG_CATS if k in cats]:
+        s = d[d["Categoría"] == c].sort_values("Año")
+        if s.empty:
+            continue
+        inst = s["Instituciones en la categoría"].map(lambda v: "" if pd.isna(v) else f" de {int(v)} instituciones")
+        fig.add_scatter(x=s["Año"].astype(str), y=s["Posición UCSP (ranking indexado)"], name=c,
+                        mode="lines+markers+text", line=dict(color=COLOR_CAT[c], width=3), marker=dict(size=9),
+                        text=s["Posición UCSP (ranking indexado)"].map(_ordinal), textposition="top center",
+                        textfont=dict(color=COLOR_CAT[c]), customdata=inst,
+                        hovertemplate=f"<b>{c} · %{{x}}</b><br>Puesto %{{y}}%{{customdata}}<extra></extra>")
+    fig = _base(fig, 340)
+    fig.update_xaxes(type="category", showgrid=False, categoryorder="category ascending")
+    fig.update_yaxes(autorange="reversed", title_text="Puesto (1 = primer lugar)", rangemode="tozero")
+    return fig
+
+
+def cg_estudiantes(part: pd.DataFrame, cats):
+    d = part[part["Categoría"].isin(cats)]
+    if d.empty:
+        return _vacio()
+    t = pd.crosstab(d["Año"], d["Categoría"])
+    fig = go.Figure()
+    for c in [k for k in CG_CATS if k in t.columns]:
+        fig.add_bar(x=t.index.astype(str), y=t[c], name=c,
+                    marker=dict(color=COLOR_CAT[c], line=dict(color=T["superficie"], width=1)),
+                    hovertemplate=f"<b>%{{x}}</b><br>{c}: %{{y}} estudiantes<extra></extra>")
+    tot = t.sum(axis=1)
+    fig.add_scatter(x=tot.index.astype(str), y=tot.values, mode="text", text=tot.values, textposition="top center",
+                    textfont=dict(color=TINTA), showlegend=False, hoverinfo="skip")
+    fig = _base(fig, 340)
+    fig.update_layout(barmode="stack", bargap=0.45)
+    fig.update_xaxes(type="category", showgrid=False)
+    fig.update_yaxes(title_text="N.º de estudiantes", range=[0, tot.max() * 1.15])
+    return fig
+
+
+def _pct_hitos(h: pd.DataFrame) -> pd.DataFrame:
+    """% de equipos que cumplió cada hito (sobre equipos con dato), por año."""
+    filas = []
+    for a, g in h.groupby("Año"):
+        for k in CG_HITOS:
+            si, no = (g[k] == "Sí").sum(), (g[k] == "No").sum()
+            filas.append(dict(Año=a, Hito=k, Sí=si, Base=si + no, Pct=si / (si + no) if si + no else None))
+    return pd.DataFrame(filas)
+
+
+def cg_hitos_evolucion(h: pd.DataFrame, cats):
+    d = h[h["Categoría"].isin(cats)]
+    if d.empty:
+        return _vacio()
+    p = _pct_hitos(d)
+    anios = sorted(p["Año"].unique())
+    fig = go.Figure()
+    colores = [PALETA[6], PALETA[4], PALETA[3], PALETA[7], PALETA[5]]
+    for i, a in enumerate(anios):
+        s = p[p["Año"] == a]
+        ultimo = i == len(anios) - 1
+        color = T["acento"] if ultimo else colores[(len(anios) - 2 - i) % len(colores)]
+        fig.add_scatter(x=s["Hito"], y=s["Pct"], name=str(a), mode="lines+markers", connectgaps=False,
+                        line=dict(color=color, width=3.5 if ultimo else 2),
+                        marker=dict(size=7), customdata=s[["Sí", "Base"]].values,
+                        hovertemplate=f"<b>{a} · %{{x}}</b><br>%{{y:.0%}} (%{{customdata[0]}} de %{{customdata[1]}} equipos)<extra></extra>")
+    fig = _base(fig, 360)
+    fig.update_xaxes(showgrid=False, categoryorder="array", categoryarray=CG_HITOS)
+    fig.update_yaxes(tickformat=".0%", range=[0, 1.05], title_text="% de equipos que lo cumplió")
+    return fig
+
+
+def cg_competencias(comp: pd.DataFrame, cats):
+    d = comp[comp["Categoría"].isin(cats)]
+    if d.empty:
+        return _vacio("Sin evaluación de competencias para las categorías elegidas")
+    g = d.groupby(["Año", "Categoría"])["Destacado + Satisfactorio %"].mean().reset_index()
+    fig = go.Figure()
+    for c in [k for k in CG_CATS if k in g["Categoría"].unique()]:
+        s = g[g["Categoría"] == c]
+        fig.add_bar(x=s["Año"].astype(str), y=s["Destacado + Satisfactorio %"] / 100, name=c,
+                    marker=dict(color=COLOR_CAT[c], cornerradius=4),
+                    text=(s["Destacado + Satisfactorio %"] / 100).map(lambda v: f"{v:.0%}"), textposition="outside",
+                    cliponaxis=False, textfont=dict(color=TINTA_2),
+                    hovertemplate=f"<b>{c} · %{{x}}</b><br>%{{y:.0%}} en Destacado o Satisfactorio<extra></extra>")
+    fig = _base(fig, 360)
+    fig.update_layout(barmode="group", bargap=0.35, margin=dict(t=60),
+                      legend=dict(orientation="h", y=1.02, yanchor="bottom", x=0))
+    fig.update_xaxes(type="category", showgrid=False)
+    fig.update_yaxes(tickformat=".0%", range=[0, 1.12])
+    return fig
+
+
+def cg_rondas(rr: pd.DataFrame):
+    rondas = ["Ranking ronda 1", "Ranking ronda 2", "Ranking ronda 3", "Ranking ronda 4"]
+    d = rr.dropna(subset=rondas, how="all")
+    if d.empty:
+        return _vacio("Esta edición no tiene ranking por ronda en la base")
+    fig = go.Figure()
+    vistos = set()
+    for _, r in d.sort_values(["Categoría", "Equipo"]).iterrows():
+        c = r["Categoría"]
+        y = [r[k] for k in rondas]
+        ult = max(i for i, v in enumerate(y) if not pd.isna(v))
+        fig.add_scatter(x=[f"Ronda {i}" for i in range(1, 5)], y=y, name=c, legendgroup=c,
+                        showlegend=c not in vistos, mode="lines+markers",
+                        line=dict(color=COLOR_CAT.get(c, TINTA_2), width=2), marker=dict(size=7),
+                        hovertemplate=f"<b>{r['Equipo']}</b><br>%{{x}}: puesto %{{y}}<extra>{c}</extra>")
+        fig.add_annotation(x=f"Ronda {ult + 1}", y=y[ult], text=str(r["Equipo"]), showarrow=False,
+                           xanchor="left", xshift=8, font=dict(size=10, color=COLOR_CAT.get(c, TINTA_2)))
+        vistos.add(c)
+    fig = _base(fig, max(380, 22 * len(d) + 120))
+    fig.update_xaxes(showgrid=False, categoryorder="array", categoryarray=[f"Ronda {i}" for i in range(1, 5)])
+    fig.update_yaxes(autorange="reversed", title_text="Puesto en el simulador (1 = mejor)")
+    fig.update_layout(margin=dict(r=170))
+    return fig
+
+
+def cg_mapa_hitos(h: pd.DataFrame):
+    if h.empty:
+        return _vacio()
+    d = h.sort_values(["Categoría", "Equipo"]).iloc[::-1]
+    etiquetas = d["Equipo"] + "  ·  " + d["Categoría"].map(lambda c: {"Administración": "Adm.",
+                                                                       "Finanzas y Contabilidad": "Fin.",
+                                                                       "Marketing": "Mkt."}.get(c, c))
+    val = d[CG_HITOS].replace({"Sí": 1, "No": 0, "s/d": None}).astype(float)
+    txt = d[CG_HITOS].values
+    sin = _mezcla(T["superficie"], T["tinta_2"], 0.25)
+    fig = go.Figure(go.Heatmap(
+        z=val.values, x=CG_HITOS, y=etiquetas, text=txt, texttemplate="%{text}",
+        textfont=dict(size=10, color=TINTA), colorscale=[[0, _mezcla(T["superficie"], ROJO_NO, 0.45)],
+                                                          [1, _mezcla(T["superficie"], VERDE_OK, 0.6)]],
+        zmin=0, zmax=1, showscale=False, xgap=3, ygap=3,
+        hovertemplate="<b>%{y}</b><br>%{x}: %{text}<extra></extra>"))
+    fig = _base(fig, max(260, 26 * len(d) + 70))
+    fig.update_layout(plot_bgcolor=sin)
+    fig.update_xaxes(side="top", showgrid=False)
+    fig.update_yaxes(showgrid=False, automargin=True)
+    return fig
+
+
+def cg_competencias_detalle(comp: pd.DataFrame):
+    if comp.empty:
+        return _vacio("Esta edición no tiene evaluación de competencias en la base")
+    niveles = [("Destacado %", _mezcla(T["superficie"], VERDE_OK, 1.0)),
+               ("Satisfactorio %", _mezcla(T["superficie"], VERDE_OK, 0.55)),
+               ("Suficiente %", _mezcla(T["superficie"], "#e3a008", 0.7)),
+               ("Insuficiente %", _mezcla(T["superficie"], ROJO_NO, 0.9))]
+    d = comp.copy()
+    d["Etiqueta"] = d["Competencia"] + " · " + d["Categoría"].map(
+        {"Administración": "Adm.", "Finanzas y Contabilidad": "Fin.", "Marketing": "Mkt."})
+    d = d.sort_values(["Competencia", "Categoría"], ascending=False)
+    fig = go.Figure()
+    for col, color in niveles:
+        fig.add_bar(y=d["Etiqueta"], x=d[col] / 100, name=col.replace(" %", ""), orientation="h",
+                    marker=dict(color=color, line=dict(color=T["superficie"], width=1)),
+                    hovertemplate=f"<b>%{{y}}</b><br>{col.replace(' %', '')}: %{{x:.0%}}<extra></extra>")
+    fig = _base(fig, max(300, 24 * len(d) + 90))
+    fig.update_layout(barmode="stack", bargap=0.3)
+    fig.update_xaxes(tickformat=".0%", range=[0, 1], showgrid=False)
+    fig.update_yaxes(showgrid=False, automargin=True)
+    return fig
 
 
 ESCALA_AZUL = [[0, T["escala_s"][0]], [1, T["escala_s"][1]]]
@@ -1070,6 +1345,91 @@ panel_curr_alumnos = ui.nav_panel(
     ),
 )
 
+panel_companygame = ui.nav_panel(
+    "Torneo CompanyGame",
+    ui.output_ui("cg_aviso"),
+    ui.layout_sidebar(
+        ui.sidebar(
+            ui.input_checkbox_group("cg_cat", "Categorías", choices=CG_CATS, selected=CG_CATS),
+            ui.input_select("cg_ed", "Edición para ver en detalle", choices=[]),
+            ui.p("Las categorías se aplican a toda la pestaña. La edición elegida solo cambia la sección "
+                 "«Detalle de la edición».", class_="kpi-nota"),
+            ui.input_action_button("cg_reset", "Limpiar filtros", class_="btn-outline-secondary btn-sm"),
+            width=290,
+        ),
+        fuente("base «CompanyGame_base_unificada», armada con los informes oficiales del Torneo ACBSP–CompanyGame "
+               "(PDF de competencias 2024 y 2025, Informe Final 2024) y los archivos de seguimiento Torneo 2022, "
+               "2023, 2024 y 2025. Los estudiantes se identifican con un código anónimo; no se usan nombres ni "
+               "correos. Categorías del torneo: Administración (curso Plan de Negocios), Finanzas y Contabilidad "
+               "(Mercados Financieros / Finanzas Corporativas II) y Marketing."),
+        ui.h5("Evolución edición a edición", class_="sec-titulo mt-1 mb-3"),
+        ui.layout_column_wrap(
+            kpi("Ediciones con participación UCSP", "cg_k_ed", "Ediciones del torneo con equipos UCSP inscritos.",
+                "cg_k_ed_nota"),
+            kpi("Equipos inscritos en la última edición", "cg_k_eq",
+                "Equipos UCSP inscritos en las categorías elegidas.", "cg_k_eq_nota"),
+            kpi("Estudiantes en la última edición", "cg_k_est",
+                "Estudiantes UCSP distintos en los listados de la edición.", "cg_k_est_nota"),
+            kpi("Mejor puesto entre instituciones", "cg_k_best",
+                "Mejor posición de la UCSP en el ranking de instituciones de una categoría.", "cg_k_best_nota"),
+            width=1 / 4, fill=False,
+        ),
+        ui.layout_columns(
+            tarjeta("Equipos UCSP por edición", ui.output_ui("cg_g_part"),
+                    "Inscritos = equipos registrados; activos = equipos que tomaron decisiones en el simulador; "
+                    "clasificados = equipos que superaron la fase clasificatoria. Totales de todas las categorías, "
+                    "según el historial de participación de los informes oficiales."),
+            tarjeta("Tasa de clasificación: UCSP vs. torneo", ui.output_ui("cg_g_clas"),
+                    "Equipos clasificados ÷ equipos inscritos. La línea punteada es el mismo cálculo para todas las "
+                    "instituciones del torneo. Todas las categorías."),
+            col_widths=(6, 6),
+        ),
+        ui.layout_columns(
+            tarjeta("Puesto de la UCSP en el ranking de instituciones", ui.output_ui("cg_g_pos"),
+                    "Posición de la UCSP en el ranking indexado de cada categoría (1 = primer lugar; el eje está "
+                    "invertido, así que subir es mejorar). Pasa el mouse para ver cuántas instituciones competían. "
+                    "2022 no tiene posición publicada."),
+            tarjeta("Estudiantes UCSP por edición y categoría", ui.output_ui("cg_g_est"),
+                    "Estudiantes distintos en los listados de cada edición. 2024 corresponde al seguimiento "
+                    "interno (Torneo 2024.xlsx)."),
+            col_widths=(6, 6),
+        ),
+        ui.layout_columns(
+            tarjeta("Avance de los equipos por hito", ui.output_ui("cg_g_hitos"),
+                    "% de equipos UCSP que cumplió cada hito, sobre los equipos con dato. Ronda: 2022 decisión del "
+                    "periodo; 2023 y 2024 decisión tomada; 2025 cuestionario de la ronda. 2024 solo tiene seguimiento "
+                    "hasta la ronda 3 y 2025 no registra video final."),
+            tarjeta("Competencias de los equipos clasificados", ui.output_ui("cg_g_comp"),
+                    "Promedio, entre las seis competencias evaluadas, del % de equipos clasificados en nivel "
+                    "Destacado o Satisfactorio. Solo existe evaluación en 2024 y 2025. Administración 2024 tuvo "
+                    "2 equipos evaluados."),
+            col_widths=(7, 5),
+        ),
+        ui.h5(ui.output_text("cg_titulo_ed", inline=True), class_="sec-titulo mt-4 mb-3"),
+        ui.layout_column_wrap(
+            kpi("Equipos inscritos", "cg_d_eq", None, "cg_d_eq_nota"),
+            kpi("Equipos clasificados", "cg_d_cla", None, "cg_d_cla_nota"),
+            kpi("Estudiantes", "cg_d_est", "Estudiantes distintos en el listado de la edición.", "cg_d_est_nota"),
+            kpi("Entregaron informe final", "cg_d_inf", None, "cg_d_inf_nota"),
+            width=1 / 4, fill=False,
+        ),
+        tarjeta("Resultados de la UCSP por categoría", ui.output_data_frame("cg_t_cat"),
+                "Datos de los informes oficiales. Puesto = posición de la UCSP en el ranking indexado de instituciones. "
+                "Ranking final medio e indexado: puntaje de 0 a 1000. Celdas vacías = dato no publicado."),
+        ui.output_ui("cg_fila_equipos"),
+        ui.output_ui("cg_oficial_2024"),
+        ui.output_ui("cg_comp_ed"),
+        tarjeta(
+            ui.div(ui.span("Detalle por equipo"),
+                   ui.download_button("cg_descargar", "Descargar (CSV)", class_="btn-sm btn-outline-secondary ms-auto"),
+                   class_="d-flex align-items-center gap-2"),
+            ui.output_data_frame("cg_t_eq"),
+            "Una fila por equipo UCSP de la edición: integrantes, hitos y puestos en el simulador. Se puede filtrar "
+            "escribiendo bajo cada columna y descargar en CSV.",
+        ),
+    ),
+)
+
 panel_docentes = ui.nav_panel(
     "Indicadores de Docentes",
     # Aquí se pueden agregar más subpestañas de docentes junto a panel_curricula
@@ -1278,7 +1638,7 @@ app_ui = ui.page_navbar(
     panel_inicio,
     ui.nav_panel(
         "Indicadores de Alumnos",
-        ui.navset_underline(panel_saliente, panel_entrante, panel_curr_alumnos, id="sub_alumnos"),
+        ui.navset_underline(panel_saliente, panel_entrante, panel_curr_alumnos, panel_companygame, id="sub_alumnos"),
     ),
     panel_docentes,
     ui.nav_spacer(),
@@ -1404,7 +1764,7 @@ app_ui = ui.page_navbar(
                      border-top: 1px solid {T['grilla']}; padding-top: .5rem; margin-top:auto; }}
         .leyenda-suelta {{ font-size: .78rem; color:{T['nota_texto']}; background:{T['nota_fondo']}; border-radius: 10px;
                            padding: .55rem .8rem; margin-top: 1rem; }}
-        #d_detalle td, #c_tabla_grupo td, #c_tabla_per td {{ white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }}
+        #d_detalle td, #c_tabla_grupo td, #c_tabla_per td, #cg_t_eq td, #cg_t_cat td {{ white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }}
     """)),
 )
 
@@ -1982,6 +2342,357 @@ def server(input, output, session):
     @render.download(filename=lambda: f"actividades_docentes_{datetime.now():%Y%m%d}.csv")
     def d_descargar():
         yield _tabla_detalle().to_csv(index=False, sep=";").encode("utf-8-sig")
+
+    # ============ TORNEO COMPANYGAME ============
+    cg_error = reactive.value(None)
+
+    @reactive.calc
+    def cg_datos():
+        input.recargar()
+        reactive.invalidate_later(MINUTOS_RECARGA * 60)
+        try:
+            d = cargar_companygame()
+            cg_error.set(None)
+            return d
+        except Exception as e:                    # un problema aquí no afecta al resto del dashboard
+            print("ERROR CompanyGame:", repr(e))
+            cg_error.set(str(e))
+            return None
+
+    def cg():
+        r = cg_datos()
+        req(r is not None)
+        return r[0]
+
+    @render.ui
+    def cg_aviso():
+        cg_datos()
+        if cg_error():
+            return ui.div(ui.strong("No se pudo leer la base CompanyGame. "), cg_error(),
+                          " Revisa que la hoja siga compartida como 'Cualquier persona con el enlace → Lector'.",
+                          class_="alert alert-warning m-3")
+
+    def _cg_anios():
+        return sorted(cg()["UCSP_EDICIONES"]["Año"].unique().tolist())
+
+    @reactive.effect
+    def _():
+        anios = _cg_anios()
+        with reactive.isolate():
+            act = input.cg_ed()
+        sel = act if act and int(act) in anios else str(anios[-1])
+        ui.update_select("cg_ed", choices=[str(a) for a in reversed(anios)], selected=sel)
+
+    @reactive.effect
+    @reactive.event(input.cg_reset)
+    def _():
+        ui.update_checkbox_group("cg_cat", selected=CG_CATS)
+        ui.update_select("cg_ed", selected=str(_cg_anios()[-1]))
+
+    def cg_cats():
+        return list(input.cg_cat()) or CG_CATS
+
+    def cg_todas():
+        return set(cg_cats()) == set(CG_CATS)
+
+    def cg_anio():
+        a = input.cg_ed()
+        req(a)
+        return int(a)
+
+    def _cg_eq_cat(anio, col):
+        """Suma por categorías elegidas (UCSP_CATEGORIAS); None si falta algún dato."""
+        c = cg()["UCSP_CATEGORIAS"]
+        s = c[(c["Año"] == anio) & c["Categoría"].isin(cg_cats())][col]
+        return None if s.empty or s.isna().any() else int(s.sum())
+
+    def _cg_inscritos(anio):
+        if cg_todas():
+            e = cg()["UCSP_EDICIONES"]
+            v = e.loc[e["Año"] == anio, "Equipos inscritos"]
+            return None if v.empty or pd.isna(v.iloc[0]) else int(v.iloc[0])
+        return _cg_eq_cat(anio, "Equipos inscritos UCSP")
+
+    # ----- Evolución -----
+    @render.text
+    def cg_k_ed():
+        return str(len(_cg_anios()))
+
+    @render.text
+    def cg_k_ed_nota():
+        a = _cg_anios()
+        return f"{a[0]}–{a[-1]}"
+
+    @render.text
+    def cg_k_eq():
+        v = _cg_inscritos(_cg_anios()[-1])
+        return "s/d" if v is None else str(v)
+
+    @render.text
+    def cg_k_eq_nota():
+        a = _cg_anios()
+        v, w = _cg_inscritos(a[-1]), _cg_inscritos(a[-2]) if len(a) > 1 else None
+        if v is None or not w:
+            return f"Edición {a[-1]}"
+        return f"Edición {a[-1]} · {v / w - 1:+.0%} vs. {a[-2]} ({w})"
+
+    def _cg_est(anio):
+        p = cg()["PARTICIPANTES"]
+        return p[(p["Año"] == anio) & p["Categoría"].isin(cg_cats())]["ID estudiante"].nunique()
+
+    @render.text
+    def cg_k_est():
+        return str(_cg_est(_cg_anios()[-1]))
+
+    @render.text
+    def cg_k_est_nota():
+        p = cg()["PARTICIPANTES"]
+        p = p[p["Categoría"].isin(cg_cats())]
+        rep = p.groupby("ID estudiante")["Año"].nunique()
+        return f"{p['ID estudiante'].nunique()} en total desde {_cg_anios()[0]} · {int((rep > 1).sum())} participaron más de una vez"
+
+    def _cg_mejor():
+        c = cg()["UCSP_CATEGORIAS"]
+        c = c[c["Categoría"].isin(cg_cats())].dropna(subset=["Posición UCSP (ranking indexado)"])
+        if c.empty:
+            return None
+        return c.sort_values(["Posición UCSP (ranking indexado)", "Año"]).iloc[0]
+
+    @render.text
+    def cg_k_best():
+        m = _cg_mejor()
+        return "–" if m is None else _ordinal(m["Posición UCSP (ranking indexado)"])
+
+    @render.text
+    def cg_k_best_nota():
+        m = _cg_mejor()
+        if m is None:
+            return "Sin posiciones publicadas"
+        inst = "" if pd.isna(m["Instituciones en la categoría"]) else f" de {int(m['Instituciones en la categoría'])}"
+        return f"{m['Categoría']} {m['Año']}{inst}"
+
+    @render.ui
+    def cg_g_part():
+        return _html(cg_participacion(cg()["UCSP_EDICIONES"].sort_values("Año")))
+
+    @render.ui
+    def cg_g_clas():
+        return _html(cg_clasificacion(cg()["UCSP_EDICIONES"].sort_values("Año")))
+
+    @render.ui
+    def cg_g_pos():
+        return _html(cg_posiciones(cg()["UCSP_CATEGORIAS"], cg_cats()))
+
+    @render.ui
+    def cg_g_est():
+        return _html(cg_estudiantes(cg()["PARTICIPANTES"], cg_cats()))
+
+    @render.ui
+    def cg_g_hitos():
+        return _html(cg_hitos_evolucion(cg()["EQUIPOS_HITOS"], cg_cats()))
+
+    @render.ui
+    def cg_g_comp():
+        return _html(cg_competencias(cg()["COMPETENCIAS"], cg_cats()))
+
+    # ----- Detalle de la edición -----
+    @render.text
+    def cg_titulo_ed():
+        return f"Detalle de la edición {cg_anio()}"
+
+    @render.text
+    def cg_d_eq():
+        v = _cg_inscritos(cg_anio())
+        return "s/d" if v is None else str(v)
+
+    @render.text
+    def cg_d_eq_nota():
+        a = cg_anio()
+        g = cg()["TORNEO_GLOBAL"]
+        tot = g.loc[g["Año"] == a, "Equipos inscritos"]
+        if cg_todas() and not tot.empty and not pd.isna(tot.iloc[0]):
+            v = _cg_inscritos(a) or 0
+            return f"{v / tot.iloc[0]:.1%} de los {int(tot.iloc[0])} equipos del torneo"
+        return "Categorías elegidas" if not cg_todas() else ""
+
+    def _cg_clasif(a):
+        if cg_todas():
+            e = cg()["UCSP_EDICIONES"]
+            v = e.loc[e["Año"] == a, "Equipos clasificados"]
+            return None if v.empty or pd.isna(v.iloc[0]) else int(v.iloc[0])
+        return _cg_eq_cat(a, "Equipos clasificados UCSP")
+
+    @render.text
+    def cg_d_cla():
+        v = _cg_clasif(cg_anio())
+        return "s/d" if v is None else str(v)
+
+    @render.text
+    def cg_d_cla_nota():
+        a = cg_anio()
+        v, n = _cg_clasif(a), _cg_inscritos(a)
+        if v is None or not n:
+            return "Sin dato por categoría para esta edición"
+        txt = f"{v / n:.0%} de los inscritos"
+        if cg_todas():
+            e = cg()["UCSP_EDICIONES"]
+            t = e.loc[e["Año"] == a, "Clasificados / inscritos del torneo"]
+            if not t.empty and not pd.isna(t.iloc[0]):
+                txt += f" · torneo: {t.iloc[0]:.0%}"
+        return txt
+
+    @render.text
+    def cg_d_est():
+        return str(_cg_est(cg_anio()))
+
+    @render.text
+    def cg_d_est_nota():
+        a = cg_anio()
+        p = cg()["PARTICIPANTES"]
+        p = p[(p["Año"] == a) & p["Categoría"].isin(cg_cats())]
+        rep = int((p["Repite (ya participó antes)"] == "Sí").sum())
+        extra = " · listado del seguimiento interno" if a == 2024 else ""
+        return f"{rep} ya habían participado antes{extra}"
+
+    def _cg_informe(a):
+        """(entregaron, equipos, fuente) del informe final."""
+        if a == 2024:
+            e = cg()["EQUIPOS_2024"]
+            e = e[e["Categoría"].isin(cg_cats())]
+            return int((e["Entregó informe final"] == "Sí").sum()), len(e), "informe oficial 2024"
+        h = cg()["EQUIPOS_HITOS"]
+        h = h[(h["Año"] == a) & h["Categoría"].isin(cg_cats())]
+        con = h[h["Informe final"].isin(["Sí", "No"])]
+        return int((con["Informe final"] == "Sí").sum()), len(con), "seguimiento de la edición"
+
+    @render.text
+    def cg_d_inf():
+        si, n, _f = _cg_informe(cg_anio())
+        return "s/d" if not n else f"{si / n:.0%}"
+
+    @render.text
+    def cg_d_inf_nota():
+        si, n, f = _cg_informe(cg_anio())
+        return "Sin dato" if not n else f"{si} de {n} equipos · {f}"
+
+    @render.data_frame
+    def cg_t_cat():
+        c = cg()["UCSP_CATEGORIAS"]
+        c = c[(c["Año"] == cg_anio()) & c["Categoría"].isin(cg_cats())].copy()
+        def ent(v):
+            return "" if pd.isna(v) else int(v)
+        def dec(v):
+            return "" if pd.isna(v) else f"{v:,.2f}"
+        t = pd.DataFrame({
+            "Categoría": c["Categoría"],
+            "Equipos inscritos": c["Equipos inscritos UCSP"].map(ent),
+            "Equipos clasificados": c["Equipos clasificados UCSP"].map(ent),
+            "Puesto UCSP": c["Posición UCSP (ranking indexado)"].map(lambda v: "" if pd.isna(v) else _ordinal(v)),
+            "Instituciones": c["Instituciones en la categoría"].map(ent),
+            "Países": c["Países en la categoría"].map(ent),
+            "Ranking final medio": c["Ranking final medio UCSP (de 1000)"].map(dec),
+            "Ranking indexado": c["Ranking indexado UCSP"].map(dec),
+            "Equipos en el torneo": c["Equipos inscritos en el torneo (categoría)"].map(ent),
+            "Nota": c["Nota"].fillna(""),
+        })
+        t = t.loc[:, [k for k in t.columns if k == "Categoría" or (t[k].astype(str) != "").any()]]
+        return render.DataGrid(t, width="100%")
+
+    def _cg_hitos_ed():
+        h = cg()["EQUIPOS_HITOS"]
+        return h[(h["Año"] == cg_anio()) & h["Categoría"].isin(cg_cats())]
+
+    @render.ui
+    def cg_g_mapa():
+        return _html(cg_mapa_hitos(_cg_hitos_ed()))
+
+    @render.ui
+    def cg_g_rondas():
+        r = cg()["RANKING_RONDAS"]
+        return _html(cg_rondas(r[(r["Año"] == cg_anio()) & r["Categoría"].isin(cg_cats())]))
+
+    @render.ui
+    def cg_g_comp_ed():
+        c = cg()["COMPETENCIAS"]
+        return _html(cg_competencias_detalle(c[(c["Año"] == cg_anio()) & c["Categoría"].isin(cg_cats())]))
+
+    @render.ui
+    def cg_fila_equipos():
+        mapa_ = tarjeta("Hitos cumplidos por cada equipo", ui.output_ui("cg_g_mapa"),
+                        "Sí / No por equipo y hito; s/d = la fuente no tiene ese dato. En 2025 solo se muestran los "
+                        "27 equipos inscritos oficialmente.")
+        r = cg()["RANKING_RONDAS"]
+        r = r[(r["Año"] == cg_anio()) & r["Categoría"].isin(cg_cats())]
+        hay = not r.dropna(subset=["Ranking ronda 1", "Ranking ronda 2", "Ranking ronda 3", "Ranking ronda 4"],
+                           how="all").empty
+        if not hay:
+            return mapa_
+        nota_r = " Esta edición llega hasta la ronda 3." if cg_anio() == 2024 else ""
+        return ui.layout_columns(
+            mapa_,
+            tarjeta("Puesto de cada equipo en el simulador, ronda a ronda", ui.output_ui("cg_g_rondas"),
+                    "Ranking de cada equipo entre todos los equipos de su categoría en el torneo (1 = mejor; eje "
+                    "invertido, así que subir es mejorar)." + nota_r),
+            col_widths=(6, 6))
+
+    @render.ui
+    def cg_comp_ed():
+        c = cg()["COMPETENCIAS"]
+        if c[(c["Año"] == cg_anio()) & c["Categoría"].isin(cg_cats())].empty:
+            return None
+        return tarjeta("Perfil competencial de los equipos clasificados", ui.output_ui("cg_g_comp_ed"),
+                       "% de equipos clasificados de la UCSP en cada nivel, por competencia y categoría (informe "
+                       "oficial). Valores leídos de los gráficos del informe.")
+
+    @render.ui
+    def cg_oficial_2024():
+        if cg_anio() != 2024:
+            return None
+        return tarjeta("Resultados oficiales por equipo 2024 (informe ACBSP)", ui.output_data_frame("cg_t_2024"),
+                       "Tabla del informe oficial 2024: 16 equipos con nombres E57_. No coinciden con los 13 equipos "
+                       "del seguimiento interno de la tabla de hitos (Torneo 2024.xlsx), por eso se muestran por "
+                       "separado. Puesto = posición del equipo en su categoría (0 = no clasificó).")
+
+    @render.data_frame
+    def cg_t_2024():
+        e = cg()["EQUIPOS_2024"]
+        e = e[e["Categoría"].isin(cg_cats())].copy()
+        cols = {"Categoría": "Categoría", "Equipo": "Equipo", "Posición (0 = no clasificó)": "Puesto",
+                "Ranking final (máx. 1000)": "Ranking final (/1000)", "Valor de la compañía (máx. 650)": "Valor compañía (/650)",
+                "Plan de acción (máx. 100)": "Plan de acción (/100)", "Informe final (máx. 150)": "Informe final (/150)",
+                "Cuestionarios (máx. 100)": "Cuestionarios (/100)", "Alcance total %": "Alcance total %",
+                "Tiempo total (min)": "Tiempo en simulador (min)", "Estado": "Estado"}
+        t = e[[c for c in cols if c in e.columns]].rename(columns=cols)
+        for c in t.columns:
+            if pd.api.types.is_numeric_dtype(t[c]):
+                t[c] = t[c].map(lambda v: "" if pd.isna(v) else (int(v) if float(v).is_integer() else round(v, 2)))
+        t = t.sort_values(["Categoría", "Estado", "Puesto"], key=lambda s: s.map(lambda v: (v == 0, v)) if s.name == "Puesto" else s)
+        return render.DataGrid(t, filters=True, width="100%", height="420px")
+
+    def _cg_tabla_eq():
+        h = _cg_hitos_ed()
+        r = cg()["RANKING_RONDAS"]
+        r = r[r["Año"] == cg_anio()][["Equipo", "Ranking ronda 1", "Ranking ronda 2", "Ranking ronda 3",
+                                       "Ranking ronda 4", "Mejor ranking", "Puntaje fase clasificatoria (2024)",
+                                       "Valor final de la compañía (2022)"]]
+        t = h.merge(r, on="Equipo", how="left")
+        cols = ["Categoría", "Curso", "Equipo", "Integrantes"] + CG_HITOS + ["Rondas completadas (de 4)",
+                "Ranking ronda 1", "Ranking ronda 2", "Ranking ronda 3", "Ranking ronda 4", "Mejor ranking",
+                "Puntaje fase clasificatoria (2024)", "Valor final de la compañía (2022)"]
+        t = t[cols]
+        t = t.loc[:, [c for c in t.columns if not (t[c].isna().all())]]
+        for c in t.columns:
+            if pd.api.types.is_numeric_dtype(t[c]):
+                t[c] = t[c].map(lambda v: "" if pd.isna(v) else int(v))
+        return t.rename(columns=lambda c: c.replace("Ranking ronda", "Puesto ronda"))
+
+    @render.data_frame
+    def cg_t_eq():
+        return render.DataGrid(_cg_tabla_eq(), filters=True, width="100%", height="420px")
+
+    @render.download(filename=lambda: f"companygame_equipos_{input.cg_ed()}.csv")
+    def cg_descargar():
+        yield _cg_tabla_eq().to_csv(index=False, sep=";").encode("utf-8-sig")
 
     # ============ ENTRANTE ============
     @reactive.calc
