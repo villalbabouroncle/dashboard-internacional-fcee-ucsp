@@ -46,11 +46,47 @@ ARCHIVO_LOCAL = Path(__file__).parent / "data" / "base.xlsx"
 
 MINUTOS_RECARGA = 10
 
-# Colores (azul = saliente, naranja = entrante; categorías en orden fijo)
-AZUL, NARANJA, VERDE = "#2a78d6", "#eb6834", "#178f65"
-PALETA = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100",
-          "#e87ba4", "#008300", "#6250d6", "#e34948"]
-TINTA, TINTA_2, GRILLA = "#0b0b0b", "#52514e", "#e7e6e2"
+# ─────────────────────────────────────────────────────────────
+# TEMA DE COLORES  →  para cambiar el aspecto del dashboard, cambia solo esta línea:
+TEMA = os.environ.get("DASH_TEMA", "oscuro")    # opciones: marino, granate, oscuro, claro, cielo
+# ─────────────────────────────────────────────────────────────
+_CAT_CLARO = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
+_CAT_OSCURO = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"]
+TEMAS = {
+    # serie_s / serie_e / serie_d = color de Saliente / Entrante+Currícula alumnos / Docentes
+    "marino": dict(nota_fondo="#eeeeea", nota_texto="#5c5b57", modo="light", barra="#0b2545", barra_texto="#ffffff", acento="#0b2545", fondo="#f6f6f3",
+                   superficie="#ffffff", tinta="#0b0b0b", tinta_2="#52514e", grilla="#e7e6e2",
+                   tierra="#f1f0ec", fronteras="#d9d8d4", paleta=_CAT_CLARO,
+                   serie_s="#2a78d6", serie_e="#eb6834", serie_d="#178f65",
+                   escala_s=["#d6e6f8", "#0d4a96"], escala_e=["#fde0d2", "#a8380f"], escala_d=["#d3f0e3", "#0b5e40"]),
+    "granate": dict(nota_fondo="#f1ece4", nota_texto="#6a5f55", modo="light", barra="#6b1d2a", barra_texto="#ffffff", acento="#c9a227", fondo="#faf7f2",
+                    superficie="#ffffff", tinta="#1f1a17", tinta_2="#5c524a", grilla="#ece5da",
+                    tierra="#f3eee6", fronteras="#dcd3c5",
+                    paleta=["#8c2338", "#c9a227", "#008f9c", "#d1784f", "#5b4b8a", "#7a8b3d", "#b55a7d", "#3e5c8a"],
+                    serie_s="#8c2338", serie_e="#b8860b", serie_d="#2f6f73",
+                    escala_s=["#f3d9de", "#6b1d2a"], escala_e=["#f6ead0", "#8a6508"], escala_d=["#d5ebec", "#1f4e51"]),
+    "oscuro": dict(nota_fondo="#2a2f37", nota_texto="#a9b0ba", modo="dark", barra="#0f1216", barra_texto="#f0efec", acento="#3987e5", fondo="#15181c",
+                   superficie="#1e2227", tinta="#f0efec", tinta_2="#c3c2b7", grilla="#30353c",
+                   tierra="#2a2f36", fronteras="#454b53", paleta=_CAT_OSCURO,
+                   serie_s="#3987e5", serie_e="#e0703a", serie_d="#22b07d",
+                   escala_s=["#1d3554", "#7fb6f2"], escala_e=["#4a2615", "#f2a47c"], escala_d=["#163a2c", "#6fd8ac"]),
+    "claro": dict(nota_fondo="#f3f4f6", nota_texto="#4b5563", modo="light", barra="#ffffff", barra_texto="#0f3d3a", acento="#0f766e", fondo="#ffffff",
+                  superficie="#ffffff", tinta="#111827", tinta_2="#4b5563", grilla="#e5e7eb",
+                  tierra="#f3f4f6", fronteras="#d1d5db",
+                  paleta=["#0a8f84", "#e4572e", "#4f46e5", "#d4a017", "#db2777", "#15803d", "#0369a1", "#9333ea"],
+                  serie_s="#0f766e", serie_e="#e4572e", serie_d="#4f46e5",
+                  escala_s=["#ccefea", "#0b5450"], escala_e=["#fbdcd2", "#a83a1b"], escala_d=["#dfdefb", "#3730a3"]),
+    "cielo": dict(nota_fondo="#e9eef6", nota_texto="#526077", modo="light", barra="linear-gradient(90deg, #1e3a8a, #2563eb)", barra_texto="#ffffff",
+                  acento="#2563eb", fondo="#f3f6fb", superficie="#ffffff", tinta="#0f172a", tinta_2="#475569",
+                  grilla="#e2e8f0", tierra="#eef2f7", fronteras="#cbd5e1",
+                  paleta=["#2563eb", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#0891b2", "#ec4899", "#65a30d"],
+                  serie_s="#2563eb", serie_e="#f59e0b", serie_d="#10b981",
+                  escala_s=["#dbe7fd", "#1e3a8a"], escala_e=["#fdecc8", "#92400e"], escala_d=["#d1f5e8", "#065f46"]),
+}
+T = TEMAS.get(TEMA, TEMAS["marino"])
+AZUL, NARANJA, VERDE = T["serie_s"], T["serie_e"], T["serie_d"]
+PALETA = T["paleta"]
+TINTA, TINTA_2, GRILLA = T["tinta"], T["tinta_2"], T["grilla"]
 
 # ─────────────────────────────────────────────────────────────
 # CARGA DE DATOS
@@ -411,7 +447,7 @@ def _base(fig: go.Figure, alto=360) -> go.Figure:
         height=alto, margin=dict(l=10, r=20, t=10, b=10),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(family="Inter, system-ui, sans-serif", size=12, color=TINTA_2),
-        hoverlabel=dict(bgcolor="white", font_color=TINTA, bordercolor=GRILLA),
+        hoverlabel=dict(bgcolor=T["superficie"], font_color=TINTA, bordercolor=GRILLA),
         legend=dict(orientation="h", y=1.08, x=0, title_text="", traceorder="normal"),
         bargap=0.25,
     )
@@ -465,7 +501,7 @@ def barras_periodo(df: pd.DataFrame, color: str, por: str | None, orden_cats: di
         for k in cats:
             idx = orden_cats[por].index(k)
             fig.add_bar(x=tabla.index, y=tabla[k], name=k,
-                        marker=dict(color=PALETA[idx % len(PALETA)], line=dict(color="white", width=1)),
+                        marker=dict(color=PALETA[idx % len(PALETA)], line=dict(color=T["superficie"], width=1)),
                         hovertemplate=f"<b>%{{x}}</b><br>{k}: %{{y}}<extra></extra>")
         fig.update_layout(barmode="stack")
     fig = _base(fig, 340)
@@ -483,12 +519,12 @@ def mapa(df: pd.DataFrame, escala: list, etiqueta="movilidades"):
     c = c.groupby("ISO3").agg(n=("n", "sum"), País=("País", "first")).reset_index()
     fig = go.Figure(go.Choropleth(
         locations=c["ISO3"], z=c["n"], text=c["País"], colorscale=escala,
-        marker_line_color="white", marker_line_width=0.5,
+        marker_line_color=T["superficie"], marker_line_width=0.5,
         colorbar=dict(title="", thickness=10, len=0.6),
         hovertemplate=f"<b>%{{text}}</b><br>%{{z}} {etiqueta}<extra></extra>",
     ))
     fig.update_geos(showframe=False, showcoastlines=False, projection_type="natural earth",
-                    showcountries=True, countrycolor="#d9d8d4", landcolor="#f1f0ec",
+                    showcountries=True, countrycolor=T["fronteras"], landcolor=T["tierra"],
                     bgcolor="rgba(0,0,0,0)")
     return _base(fig, 380)
 
@@ -499,9 +535,9 @@ def _html(fig: go.Figure):
                                config={"displaylogo": False, "responsive": True}))
 
 
-ESCALA_AZUL = [[0, "#d6e6f8"], [1, "#0d4a96"]]
-ESCALA_NARANJA = [[0, "#fde0d2"], [1, "#a8380f"]]
-ESCALA_VERDE = [[0, "#d3f0e3"], [1, "#0b5e40"]]
+ESCALA_AZUL = [[0, T["escala_s"][0]], [1, T["escala_s"][1]]]
+ESCALA_NARANJA = [[0, T["escala_e"][0]], [1, T["escala_e"][1]]]
+ESCALA_VERDE = [[0, T["escala_d"][0]], [1, T["escala_d"][1]]]
 
 # ─────────────────────────────────────────────────────────────
 # INTERFAZ
@@ -583,7 +619,7 @@ panel_saliente = ui.nav_panel(
         ),
         ui.layout_columns(
             tarjeta("Destinos en el mundo", ui.output_ui("s_g_mapa"),
-                    "Color más oscuro = más movilidades hacia ese país."),
+                    "Color más intenso = más movilidades hacia ese país."),
             tarjeta("Estudiantes por país de destino", ui.output_ui("s_g_pais"),
                     "Número de movilidades por país de destino."),
             col_widths=(7, 5),
@@ -646,7 +682,7 @@ panel_entrante = ui.nav_panel(
         ),
         ui.layout_columns(
             tarjeta("Países de origen en el mundo", ui.output_ui("e_g_mapa"),
-                    "Color más oscuro = más estudiantes visitantes de ese país."),
+                    "Color más intenso = más estudiantes visitantes de ese país."),
             tarjeta("Estudiantes por país de origen", ui.output_ui("e_g_pais"),
                     "Número de estudiantes visitantes por país de origen."),
             col_widths=(7, 5),
@@ -733,7 +769,7 @@ panel_curricula = ui.nav_panel(
                 "por carrera, tipo y periodo. La fila TOTAL suma Clase Espejo + COIL + Profesor Visitante."),
         ui.layout_columns(
             tarjeta("Países socios", ui.output_ui("d_g_mapa"),
-                    "Color más oscuro = más actividades distintas con universidades de ese país."),
+                    "Color más intenso = más actividades distintas con universidades de ese país."),
             tarjeta("Actividades por país socio", ui.output_ui("d_g_pais"),
                     "Actividades distintas por país socio (no se muestran 'Sin información' ni 'No aplica')."),
             col_widths=(7, 5),
@@ -873,23 +909,41 @@ app_ui = ui.page_navbar(
     window_title="Indicadores de Internacionalización FCEE",
     footer=ui.div(ui.output_text("estado"), class_="text-muted small px-4 py-2"),
     fillable=False,
-    header=ui.TagList(ui.output_ui("aviso"), ui.head_content(ui.tags.script(src="plotlyjs/plotly.min.js")), ui.tags.style("""
-        body { background:#f6f6f3; }
-        .bslib-value-box .value-box-value { font-size: 2rem; font-weight: 600; }
-        .bslib-value-box .value-box-title { font-size: .85rem; color:#52514e; }
-        .card-header { font-weight: 600; background: transparent; }
-        .navbar { background: #0b2545 !important; }
-        .navbar .nav-link, .navbar-brand { color: #fff !important; }
-        .navbar .nav-link.active { border-bottom: 2px solid #fff; }
-        .navbar-brand { font-weight: 600; }
-        #sub_alumnos, #sub_docentes { padding: .75rem 1rem 0; background:#fff; border-bottom:1px solid #e7e6e2; }
-        #sub_alumnos .nav-link, #sub_docentes .nav-link { color:#52514e !important; font-weight:500; }
-        #sub_alumnos .nav-link.active, #sub_docentes .nav-link.active { color:#0b2545 !important; border-bottom-color:#0b2545; }
-        .card-header .form-group { margin-bottom: 0; }
-        .kpi-nota { font-size: .75rem; color:#6b6a66; margin: .35rem 0 0; line-height: 1.25; }
-        .kpi-dinamica { font-size: .8rem; color:#3d3c39; font-weight: 500; }
-        .card-footer.leyenda { font-size: .78rem; color:#52514e; background: #fafaf8; }
-        #d_detalle td, #c_tabla_grupo td, #c_tabla_per td { white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
+    header=ui.TagList(
+        ui.output_ui("aviso"),
+        ui.head_content(
+            ui.tags.script(src="plotlyjs/plotly.min.js"),
+            ui.tags.script(f"document.documentElement.setAttribute('data-bs-theme', '{T['modo']}');"),
+        ),
+        ui.tags.style(f"""
+        body {{ background:{T['fondo']}; color:{T['tinta']}; }}
+        .card, .bslib-value-box, .bslib-sidebar-layout > .sidebar {{ background:{T['superficie']} !important; }}
+        .bslib-sidebar-layout {{ background:{T['superficie']}; }}
+        .bslib-value-box {{ border-top: 3px solid {T['acento']} !important; }}
+        .bslib-value-box .value-box-value {{ font-size: 2rem; font-weight: 600; color:{T['tinta']}; }}
+        .bslib-value-box .value-box-title {{ font-size: .85rem; color:{T['tinta_2']}; }}
+        .card-header {{ font-weight: 600; background: transparent; color:{T['tinta']}; }}
+        .navbar {{ background: {T['barra']} !important; border-bottom: 1px solid {T['grilla']}; }}
+        .navbar .nav-link, .navbar-brand {{ color: {T['barra_texto']} !important; }}
+        .navbar .nav-link.active {{ border-bottom: 2px solid {T['acento'] if T['barra'] in ('#ffffff',) else T['barra_texto']}; }}
+        .navbar-brand {{ font-weight: 600; }}
+        .navbar .btn {{ border:1px solid {T['grilla']}; }}
+        #sub_alumnos, #sub_docentes {{ padding: .75rem 1rem 0; background:{T['superficie']}; border-bottom:1px solid {T['grilla']}; }}
+        #sub_alumnos .nav-link, #sub_docentes .nav-link {{ color:{T['tinta_2']} !important; font-weight:500; }}
+        #sub_alumnos .nav-link.active, #sub_docentes .nav-link.active {{ color:{T['tinta']} !important; border-bottom-color:{T['acento']}; }}
+        .card-header .form-group {{ margin-bottom: 0; }}
+        .kpi-nota {{ font-size: .72rem; color:{T['nota_texto']}; background:{T['nota_fondo']};
+                     border-radius: 6px; padding: .35rem .5rem; margin: .5rem 0 0; line-height: 1.25; }}
+        .kpi-dinamica {{ font-size: .8rem; color:{T['tinta']}; font-weight: 500; }}
+        .card-footer.leyenda {{ font-size: .78rem; color:{T['nota_texto']}; background:{T['nota_fondo']};
+                                border-top: 1px solid {T['grilla']}; padding-right: 2.75rem; }}
+        .alert-light {{ background:{T['nota_fondo']} !important; color:{T['nota_texto']};
+                       border: none !important; border-left: 3px solid {T['acento']} !important; }}
+        .alert-light strong {{ color:{T['tinta']}; }}
+        .btn-outline-secondary {{ color:{T['tinta_2']}; border-color:{T['grilla']}; }}
+        .btn-outline-secondary:hover {{ background:{T['nota_fondo']}; color:{T['tinta']}; }}
+        .form-check-input:checked {{ background-color:{T['acento']}; border-color:{T['acento']}; }}
+        #d_detalle td, #c_tabla_grupo td, #c_tabla_per td {{ white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }}
     """)),
 )
 
@@ -1317,7 +1371,7 @@ def server(input, output, session):
             res[c] = res[c].fillna(0).astype(int)
         es_total = res["Tipo"].str.startswith("TOTAL")
         estilos = [{"rows": res.index[es_total].tolist(),
-                    "style": {"font-weight": "600", "background-color": "#eef7f2"}}]
+                    "style": {"font-weight": "600", "background-color": "rgba(127,127,127,.12)"}}]
         return render.DataGrid(res, width="100%", height="560px", styles=estilos)
 
     @render.ui
