@@ -511,11 +511,32 @@ def multi(id_, etiqueta):
                               options={"placeholder": "Todos", "plugins": ["remove_button"]})
 
 
-def tarjeta(titulo, salida, nota=None):
+def nota(texto):
+    """Leyenda corta visible dentro de una tarjeta de indicador."""
+    return ui.p(texto, class_="kpi-nota")
+
+
+def kpi(titulo, id_, texto=None, nota_id=None):
+    """Tarjeta de indicador: valor + (nota dinámica) + leyenda fija de cómo se calcula."""
+    extra = []
+    if nota_id:
+        extra.append(ui.div(ui.output_text(nota_id, inline=True), class_="kpi-dinamica"))
+    if texto:
+        extra.append(nota(texto))
+    return ui.value_box(titulo, ui.output_text(id_), *extra)
+
+
+def tarjeta(titulo, salida, texto=None):
+    """Gráfico o tabla con su leyenda al pie (fuente y cálculo)."""
     hijos = [ui.card_header(titulo), salida]
-    if nota:
-        hijos.append(ui.card_footer(nota))
+    if texto:
+        hijos.append(ui.card_footer(ui.span("ⓘ ", class_="text-muted"), texto, class_="leyenda"))
     return ui.card(*hijos, full_screen=True)
+
+
+def fuente(*partes):
+    """Recuadro al inicio de cada subpestaña: de dónde salen los datos."""
+    return ui.div(ui.strong("Fuente de los datos: "), *partes, class_="alert alert-light border small mb-3")
 
 
 panel_saliente = ui.nav_panel(
@@ -536,11 +557,17 @@ panel_saliente = ui.nav_panel(
             ui.input_action_button("s_reset", "Limpiar filtros", class_="btn-outline-secondary btn-sm"),
             width=290,
         ),
+        fuente("archivo «Consolidado de Movilidad Estudiantil SALIENTE y ENTRANTE», pestaña MOVILIDAD SALIENTE. "
+               "Cada fila de esa base es un estudiante UCSP que realizó una movilidad en un periodo académico. "
+               "No se usan nombres ni correos. Los filtros de la izquierda se aplican a todos los indicadores, "
+               "gráficos y tablas de esta pestaña."),
         ui.layout_column_wrap(
-            ui.value_box("Estudiantes UCSP en movilidad", ui.output_text("s_kpi_total")),
-            ui.value_box("Países de destino", ui.output_text("s_kpi_paises")),
-            ui.value_box("Universidades de destino", ui.output_text("s_kpi_unis")),
-            ui.value_box("Movilidad presencial", ui.output_text("s_kpi_pres")),
+            kpi("Estudiantes UCSP en movilidad", "s_kpi_total",
+                "Número de movilidades registradas. Un estudiante que salió en dos periodos cuenta dos veces."),
+            kpi("Países de destino", "s_kpi_paises", "Países distintos a los que fueron los estudiantes."),
+            kpi("Universidades de destino", "s_kpi_unis", "Universidades de destino distintas."),
+            kpi("Movilidad presencial", "s_kpi_pres",
+                "% de movilidades en modalidad Presencial (el resto es Virtual)."),
             width=1 / 4, fill=False,
         ),
         tarjeta(
@@ -551,22 +578,32 @@ panel_saliente = ui.nav_panel(
                        "Concepto": "por Concepto"}), class_="ms-auto"),
                    class_="d-flex align-items-center gap-2"),
             ui.output_ui("s_g_periodo"),
+            "Número de movilidades en cada periodo académico (columna Per. Acad., llevada al formato AAAA-01/AAAA-02). "
+            "Con el selector, cada barra se divide por la categoría elegida.",
         ),
         ui.layout_columns(
-            tarjeta("Destinos en el mundo", ui.output_ui("s_g_mapa")),
-            tarjeta("Estudiantes por país de destino", ui.output_ui("s_g_pais")),
+            tarjeta("Destinos en el mundo", ui.output_ui("s_g_mapa"),
+                    "Color más oscuro = más movilidades hacia ese país."),
+            tarjeta("Estudiantes por país de destino", ui.output_ui("s_g_pais"),
+                    "Número de movilidades por país de destino."),
             col_widths=(7, 5),
         ),
         ui.layout_columns(
-            tarjeta("Top 15 universidades de destino", ui.output_ui("s_g_uni")),
+            tarjeta("Top 15 universidades de destino", ui.output_ui("s_g_uni"),
+                    "Las 15 universidades que recibieron más movilidades con los filtros aplicados."),
             ui.div(
-                tarjeta("Por escuela profesional", ui.output_ui("s_g_esc")),
-                tarjeta("Por concepto", ui.output_ui("s_g_con")),
-                tarjeta("Por modalidad (duración)", ui.output_ui("s_g_dur")),
+                tarjeta("Por escuela profesional", ui.output_ui("s_g_esc"),
+                        "Movilidades según la escuela del estudiante (Esc. Prof. UCSP)."),
+                tarjeta("Por concepto", ui.output_ui("s_g_con"),
+                        "Movilidades según la columna Concepto (intercambio, conferencia, etc.)."),
+                tarjeta("Por modalidad (duración)", ui.output_ui("s_g_dur"),
+                        "Movilidades según la duración registrada (Larga / Corta / Sin información)."),
             ),
             col_widths=(7, 5),
         ),
-        tarjeta("Detalle por universidad de destino", ui.output_data_frame("s_tabla")),
+        tarjeta("Detalle por universidad de destino", ui.output_data_frame("s_tabla"),
+                "Una fila por universidad: número de movilidades, primer y último periodo con movilidad, y convenios "
+                "con los que se realizaron. Se puede filtrar escribiendo bajo cada columna."),
     ),
 )
 
@@ -586,11 +623,16 @@ panel_entrante = ui.nav_panel(
             ui.input_action_button("e_reset", "Limpiar filtros", class_="btn-outline-secondary btn-sm"),
             width=290,
         ),
+        fuente("archivo «Consolidado de Movilidad Estudiantil SALIENTE y ENTRANTE», pestaña MOVILIDAD ENTRANTE. "
+               "Cada fila es un estudiante de otra universidad que estudió en la UCSP en un periodo. "
+               "No se usan nombres ni correos. Los filtros de la izquierda se aplican a toda esta pestaña."),
         ui.layout_column_wrap(
-            ui.value_box("Estudiantes visitantes", ui.output_text("e_kpi_total")),
-            ui.value_box("Países de origen", ui.output_text("e_kpi_paises")),
-            ui.value_box("Universidades de origen", ui.output_text("e_kpi_unis")),
-            ui.value_box("Periodos con movilidad", ui.output_text("e_kpi_per")),
+            kpi("Estudiantes visitantes", "e_kpi_total",
+                "Número de estudiantes visitantes registrados en los periodos elegidos."),
+            kpi("Países de origen", "e_kpi_paises", "Países distintos de donde vinieron."),
+            kpi("Universidades de origen", "e_kpi_unis", "Universidades de origen distintas."),
+            kpi("Periodos con movilidad", "e_kpi_per",
+                "Periodos académicos con al menos un estudiante visitante."),
             width=1 / 4, fill=False,
         ),
         tarjeta(
@@ -600,21 +642,29 @@ panel_entrante = ui.nav_panel(
                           class_="ms-auto"),
                    class_="d-flex align-items-center gap-2"),
             ui.output_ui("e_g_periodo"),
+            "Número de estudiantes visitantes por periodo académico. Con el selector se divide por carrera o país.",
         ),
         ui.layout_columns(
-            tarjeta("Países de origen en el mundo", ui.output_ui("e_g_mapa")),
-            tarjeta("Estudiantes por país de origen", ui.output_ui("e_g_pais")),
+            tarjeta("Países de origen en el mundo", ui.output_ui("e_g_mapa"),
+                    "Color más oscuro = más estudiantes visitantes de ese país."),
+            tarjeta("Estudiantes por país de origen", ui.output_ui("e_g_pais"),
+                    "Número de estudiantes visitantes por país de origen."),
             col_widths=(7, 5),
         ),
         ui.layout_columns(
-            tarjeta("Universidades de origen", ui.output_ui("e_g_uni")),
+            tarjeta("Universidades de origen", ui.output_ui("e_g_uni"),
+                    "Número de estudiantes visitantes por universidad de origen."),
             ui.div(
-                tarjeta("Por carrera", ui.output_ui("e_g_car")),
-                tarjeta("Por convenio", ui.output_ui("e_g_conv")),
+                tarjeta("Por carrera", ui.output_ui("e_g_car"),
+                        "Carrera de la UCSP en la que estudiaron."),
+                tarjeta("Por convenio", ui.output_ui("e_g_conv"),
+                        "Convenio o red bajo el que llegaron."),
             ),
             col_widths=(7, 5),
         ),
-        tarjeta("Detalle por universidad de origen", ui.output_data_frame("e_tabla")),
+        tarjeta("Detalle por universidad de origen", ui.output_data_frame("e_tabla"),
+                "Una fila por universidad: número de estudiantes, primer y último periodo, y carreras en las que "
+                "estudiaron. Se puede filtrar escribiendo bajo cada columna."),
     ),
 )
 
@@ -640,18 +690,22 @@ panel_curricula = ui.nav_panel(
             ui.input_action_button("d_reset", "Limpiar filtros", class_="btn-outline-secondary btn-sm"),
             width=290,
         ),
+        fuente("archivo «BASE GENERAL DE MOVILIDAD DOCENTE», pestaña Consoli. Cada fila es una actividad "
+               "internacional de un docente UCSP registrada para una carrera (ADM o CONT); una actividad para ambas "
+               "carreras aparece en dos filas. No se usan correos, evidencias ni enlaces de encuestas."),
         ui.layout_column_wrap(
-            ui.value_box("Actividades del indicador", ui.output_text("d_kpi_ind"),
-                         ui.p("Clase Espejo + COIL + Profesor Visitante", class_="small text-muted mb-0")),
-            ui.value_box("Clases espejo", ui.output_text("d_kpi_ce")),
-            ui.value_box("COIL", ui.output_text("d_kpi_coil")),
-            ui.value_box("Profesores visitantes", ui.output_text("d_kpi_pv")),
-            ui.value_box("Otras actividades", ui.output_text("d_kpi_otras"),
-                         ui.p("Actividad internacional, postulación, congresos…", class_="small text-muted mb-0")),
-            ui.value_box("Docentes UCSP participantes", ui.output_text("d_kpi_doc")),
-            ui.value_box("Universidades socias", ui.output_text("d_kpi_uni")),
-            ui.value_box("Alumnos participantes", ui.output_text("d_kpi_alu"),
-                         ui.p("Según N° de alumnos ADM + CONT registrados", class_="small text-muted mb-0")),
+            kpi("Actividades del indicador", "d_kpi_ind",
+                "Clase Espejo + COIL + Profesor Visitante. Cada actividad cuenta una vez."),
+            kpi("Clases espejo", "d_kpi_ce", "Clases espejo distintas (compartida ADM-CONT = 1)."),
+            kpi("COIL", "d_kpi_coil", "COIL distintos (compartido ADM-CONT = 1)."),
+            kpi("Profesores visitantes", "d_kpi_pv", "Actividades de profesor visitante distintas."),
+            kpi("Otras actividades", "d_kpi_otras",
+                "Actividad internacional, postulación, congresos, etc. No entran al indicador."),
+            kpi("Docentes UCSP participantes", "d_kpi_doc",
+                "Docentes UCSP distintos con al menos una actividad."),
+            kpi("Universidades socias", "d_kpi_uni", "Universidades contraparte distintas."),
+            kpi("Alumnos participantes", "d_kpi_alu",
+                "Suma de N° alumnos ADM + CONT de cada actividad (una vez por actividad)."),
             width=1 / 4, fill=False,
         ),
         ui.div(
@@ -671,30 +725,38 @@ panel_curricula = ui.nav_panel(
                           class_="ms-auto"),
                    class_="d-flex align-items-center gap-2"),
             ui.output_ui("d_g_periodo"),
-            "Cada actividad se cuenta una vez. Al desagregar por carrera, una actividad compartida por ADM y CONT "
-            "se cuenta en ambas (igual que en el Resumen de Actividades).",
+            "Actividades distintas por periodo (columna Semestre). Al desagregar por carrera, una actividad "
+            "compartida por ADM y CONT se cuenta en ambas (igual que en el Resumen de Actividades).",
         ),
         tarjeta("Resumen de actividades por carrera y periodo", ui.output_data_frame("d_resumen"),
-                "Mismo cálculo que la pestaña 'Resumen Actividades': número de actividades por carrera, "
-                "tipo y periodo. La fila Total suma Clase Espejo + COIL + Profesor Visitante."),
+                "Mismo cálculo que la pestaña 'Resumen Actividades' de la base docente: número de filas de Consoli "
+                "por carrera, tipo y periodo. La fila TOTAL suma Clase Espejo + COIL + Profesor Visitante."),
         ui.layout_columns(
-            tarjeta("Países socios", ui.output_ui("d_g_mapa")),
-            tarjeta("Actividades por país socio", ui.output_ui("d_g_pais")),
+            tarjeta("Países socios", ui.output_ui("d_g_mapa"),
+                    "Color más oscuro = más actividades distintas con universidades de ese país."),
+            tarjeta("Actividades por país socio", ui.output_ui("d_g_pais"),
+                    "Actividades distintas por país socio (no se muestran 'Sin información' ni 'No aplica')."),
             col_widths=(7, 5),
         ),
         ui.layout_columns(
-            tarjeta("Top 15 universidades contraparte", ui.output_ui("d_g_uni")),
-            tarjeta("Docentes UCSP con más actividades (top 15)", ui.output_ui("d_g_prof")),
+            tarjeta("Top 15 universidades contraparte", ui.output_ui("d_g_uni"),
+                    "Las 15 universidades con más actividades distintas."),
+            tarjeta("Docentes UCSP con más actividades (top 15)", ui.output_ui("d_g_prof"),
+                    "Los 15 docentes UCSP con más actividades distintas (columna Profesor UCSP)."),
             col_widths=(6, 6),
         ),
         ui.layout_columns(
-            tarjeta("Por tipo de actividad", ui.output_ui("d_g_tipo")),
-            tarjeta("Por línea del curso", ui.output_ui("d_g_lin")),
+            tarjeta("Por tipo de actividad", ui.output_ui("d_g_tipo"),
+                    "Actividades distintas por tipo (se unifican mayúsculas: 'Clase espejo' = 'Clase Espejo')."),
+            tarjeta("Por línea del curso", ui.output_ui("d_g_lin"),
+                    "Actividades distintas por línea del curso (las 12 con más actividades)."),
             col_widths=(6, 6),
         ),
         ui.layout_columns(
-            tarjeta("Por modalidad", ui.output_ui("d_g_mod")),
-            tarjeta("Por dictado", ui.output_ui("d_g_dic")),
+            tarjeta("Por modalidad", ui.output_ui("d_g_mod"),
+                    "Actividades distintas según modalidad (Virtual / Presencial)."),
+            tarjeta("Por dictado", ui.output_ui("d_g_dic"),
+                    "Actividades distintas según la columna Dictado de Consoli (Bilateral / Unilateral)."),
             col_widths=(6, 6),
         ),
         tarjeta(
@@ -702,13 +764,11 @@ panel_curricula = ui.nav_panel(
                    ui.download_button("d_descargar", "Descargar (CSV)", class_="btn-sm btn-outline-secondary ms-auto"),
                    class_="d-flex align-items-center gap-2"),
             ui.output_data_frame("d_detalle"),
+            "Una fila por actividad. Si una actividad estaba registrada para ADM y CONT, aparece una sola vez y la "
+            "columna Carreras indica ambas. Se puede filtrar escribiendo bajo cada columna y descargar en CSV.",
         ),
     ),
 )
-
-def kpi(titulo, id_, nota_id=None):
-    extra = [ui.output_text(nota_id, inline=False)] if nota_id else []
-    return ui.value_box(titulo, ui.output_text(id_), *extra)
 
 
 panel_curr_alumnos = ui.nav_panel(
@@ -724,40 +784,63 @@ panel_curr_alumnos = ui.nav_panel(
             multi("c_esc", "Escuela profesional"),
             ui.input_checkbox_group("c_tipo", "Actividades que cuentan para el indicador",
                                     choices=TIPOS_CURRICULA, selected=TIPOS_CURRICULA),
+            ui.input_radio_buttons("c_modo", "Al elegir varios periodos, contar…", choices={
+                "unicos": "Alumnos únicos en todo el rango",
+                "semestre": "Sumando cada semestre (como la macro)"}, selected="unicos"),
             ui.input_action_button("c_reset", "Limpiar filtros", class_="btn-outline-secondary btn-sm"),
             width=290,
         ),
+        fuente("archivo «CONSULTA_INDICADOR_INTERNACIONALIZACION_CURRICULA». BASE_GENERAL: una fila por alumno, "
+               "curso y grupo en cada periodo; el tipo de actividad de cada curso-grupo viene de la base docente "
+               "(Consoli). MATRICULADOS: alumnos matriculados por escuela y periodo según el Portal de Transparencia "
+               "UCSP. Los alumnos se identifican con un número anónimo; no se usan nombres ni códigos."),
         ui.layout_column_wrap(
-            kpi("% de alumnos con actividad internacional", "c_kpi_pct", "c_kpi_pct_nota"),
-            kpi("Alumnos con actividad internacional", "c_kpi_num", "c_kpi_num_nota"),
-            kpi("Matriculados (denominador)", "c_kpi_den", "c_kpi_den_nota"),
+            kpi("% de alumnos con actividad internacional", "c_kpi_pct",
+                "Alumnos con actividad ÷ alumnos matriculados (tarjetas de la derecha).", "c_kpi_pct_nota"),
+            kpi("Alumnos con actividad internacional", "c_kpi_num",
+                "Alumnos que llevaron al menos un curso-grupo con una actividad de los tipos marcados.",
+                "c_kpi_num_nota"),
+            kpi("Alumnos matriculados (denominador)", "c_kpi_den",
+                "Un periodo: Transparencia UCSP. Varios periodos con alumnos únicos: alumnos distintos de la base.",
+                "c_kpi_den_nota"),
             width=1 / 3, fill=False,
         ),
         ui.layout_column_wrap(
-            kpi("Alumnos en clases espejo", "c_kpi_ce", "c_kpi_ce_nota"),
-            kpi("Alumnos en COIL", "c_kpi_coil", "c_kpi_coil_nota"),
-            kpi("Alumnos con profesor visitante", "c_kpi_pv", "c_kpi_pv_nota"),
+            kpi("Alumnos en clases espejo", "c_kpi_ce",
+                "Alumnos distintos con al menos una clase espejo.", "c_kpi_ce_nota"),
+            kpi("Alumnos en COIL", "c_kpi_coil",
+                "Alumnos distintos con al menos un COIL.", "c_kpi_coil_nota"),
+            kpi("Alumnos con profesor visitante", "c_kpi_pv",
+                "Alumnos distintos con al menos una sesión de profesor visitante.", "c_kpi_pv_nota"),
             width=1 / 3, fill=False,
         ),
         ui.div(
             ui.strong("¿Cómo se calcula? "),
-            "Para cada periodo y escuela: alumnos únicos que participaron en al menos una actividad "
-            "internacional (en cualquiera de sus cursos y grupos) ÷ alumnos matriculados según el Portal de "
-            "Transparencia UCSP. Si se elige un rango de periodos, se suman matriculados y participantes de "
-            "cada periodo (alumno-semestre): un alumno con actividad en dos periodos cuenta en cada uno. "
-            "Un alumno con más de un tipo de actividad aparece en cada tipo, pero en el indicador cuenta una vez.",
+            "En un solo periodo: alumnos únicos que participaron en al menos una actividad internacional "
+            "(en cualquiera de sus cursos y grupos) ÷ alumnos matriculados según el Portal de Transparencia UCSP. "
+            "En varios periodos, con 'Alumnos únicos en todo el rango': cada alumno cuenta una sola vez aunque haya "
+            "participado en varios semestres, y el denominador son los alumnos distintos que aparecen en la base "
+            "en ese rango (Transparencia solo publica totales por semestre y no permite identificar alumnos "
+            "repetidos). Con 'Sumando cada semestre' se suman los resultados de cada periodo (alumno-semestre), "
+            "como en la macro. Un alumno con más de un tipo de actividad aparece en cada tipo, pero en el "
+            "indicador cuenta una vez.",
             class_="alert alert-light border small mb-3",
         ),
-        tarjeta("% de alumnos con actividad internacional por periodo", ui.output_ui("c_g_pct")),
+        tarjeta("% de alumnos con actividad internacional por periodo", ui.output_ui("c_g_pct"),
+                "Para cada periodo y escuela: alumnos únicos con actividad ÷ matriculados de Transparencia "
+                "(si falta ese dato, alumnos de la base). Pasa el mouse por una barra para ver el número de alumnos."),
         tarjeta("Alumnos por tipo de actividad y periodo", ui.output_ui("c_g_tipo"),
-                "Un alumno puede figurar en más de un tipo."),
+                "Alumnos distintos con cada tipo de actividad en cada periodo. Un alumno puede figurar en más de un tipo."),
         tarjeta("Detalle por periodo", ui.output_data_frame("c_tabla_per"),
-                "'En base' = alumnos únicos de la escuela en la base (solo referencia; no se usa como denominador "
-                "salvo que falte el dato de Transparencia)."),
+                "Mismo detalle que la macro. 'En base' = alumnos distintos de la escuela en BASE_GENERAL (referencia; "
+                "solo se usa como denominador si falta el dato de Transparencia). Las columnas por tipo son alumnos distintos."),
         ui.layout_columns(
-            tarjeta("Cursos con más alumnos participantes (top 15)", ui.output_ui("c_g_curso")),
+            tarjeta("Cursos con más alumnos participantes (top 15)", ui.output_ui("c_g_curso"),
+                    "Alumnos distintos que tuvieron una actividad internacional en ese curso (todos sus grupos) "
+                    "en los periodos elegidos."),
             tarjeta("Participaciones por línea del curso", ui.output_ui("c_g_linea"),
-                    "Participación = un alumno en un curso con actividad internacional."),
+                    "Participación = un alumno en un curso-grupo con actividad internacional. Un alumno con "
+                    "actividad en dos cursos suma dos participaciones."),
             col_widths=(6, 6),
         ),
         tarjeta(
@@ -765,7 +848,8 @@ panel_curr_alumnos = ui.nav_panel(
                    ui.download_button("c_descargar", "Descargar (CSV)", class_="btn-sm btn-outline-secondary ms-auto"),
                    class_="d-flex align-items-center gap-2"),
             ui.output_data_frame("c_tabla_grupo"),
-            "Sin datos personales: se muestra el número de alumnos por curso y grupo, no el listado de alumnos.",
+            "Una fila por periodo, escuela, curso, grupo y tipo de actividad, con el número de alumnos de esa escuela "
+            "en ese grupo. No se muestra el listado de alumnos (datos personales).",
         ),
     ),
 )
@@ -802,6 +886,9 @@ app_ui = ui.page_navbar(
         #sub_alumnos .nav-link, #sub_docentes .nav-link { color:#52514e !important; font-weight:500; }
         #sub_alumnos .nav-link.active, #sub_docentes .nav-link.active { color:#0b2545 !important; border-bottom-color:#0b2545; }
         .card-header .form-group { margin-bottom: 0; }
+        .kpi-nota { font-size: .75rem; color:#6b6a66; margin: .35rem 0 0; line-height: 1.25; }
+        .kpi-dinamica { font-size: .8rem; color:#3d3c39; font-weight: 500; }
+        .card-footer.leyenda { font-size: .78rem; color:#52514e; background: #fafaf8; }
         #d_detalle td, #c_tabla_grupo td, #c_tabla_per td { white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
     """)),
 )
@@ -982,6 +1069,7 @@ def server(input, output, session):
     def _():
         _poblar(cur()[0], FILTROS_C, "c", limpiar=True)
         ui.update_checkbox_group("c_tipo", selected=TIPOS_CURRICULA)
+        ui.update_radio_buttons("c_modo", selected="unicos")
 
     @reactive.calc
     def c_base():
@@ -994,43 +1082,58 @@ def server(input, output, session):
         tipos = list(input.c_tipo()) or TIPOS_CURRICULA
         return resumen_curricula(c_base(), cur()[1], tipos)
 
-    def _tot(col):
-        return int(c_res()[col].sum())
+    @reactive.calc
+    def c_ind():
+        """Valores de las tarjetas según el modo de conteo."""
+        r = c_res()
+        tipos_sel = list(input.c_tipo()) or TIPOS_CURRICULA
+        varios = r["Periodo"].nunique() > 1
+        if varios and input.c_modo() == "unicos":
+            b = c_base()
+            num = int(b.loc[b[tipos_sel].any(axis=1), "ID"].nunique())
+            den = int(b["ID"].nunique())
+            por_tipo = {t: int(b.loc[b[t], "ID"].nunique()) for t in TIPOS_CURRICULA}
+            return dict(num=num, den=den, tipos=por_tipo,
+                        nota_pct=f"Acumulado de {r['Periodo'].nunique()} periodos (alumnos únicos)",
+                        nota_num="Cada alumno cuenta una vez en todo el rango",
+                        nota_den="Alumnos distintos en la base durante el rango")
+        respaldo = (r["Fuente"] != "Transparencia UCSP").any()
+        return dict(num=int(r["Con actividad"].sum()), den=int(r["Matriculados"].sum()),
+                    tipos={t: int(r[t].sum()) for t in TIPOS_CURRICULA},
+                    nota_pct=("Periodo único" if not varios else
+                              f"{r['Periodo'].nunique()} periodos sumados (alumno-semestre)"),
+                    nota_num="Alumnos únicos por periodo",
+                    nota_den=("Incluye respaldo de la base en algún periodo" if respaldo
+                              else "Fuente: Transparencia UCSP" + (" (sumada por semestre)" if varios else "")))
 
     def _pct(n):
-        den = _tot("Matriculados")
+        den = c_ind()["den"]
         return f"{n / den:.1%}" if den else "—"
 
     @render.text
-    def c_kpi_pct():
-        return _pct(_tot("Con actividad"))
+    def c_kpi_pct(): return _pct(c_ind()["num"])
     @render.text
-    def c_kpi_pct_nota():
-        n = c_res()["Periodo"].nunique()
-        return "Periodo único" if n == 1 else f"{n} periodos sumados (alumno-semestre)"
+    def c_kpi_pct_nota(): return c_ind()["nota_pct"]
     @render.text
-    def c_kpi_num(): return f"{_tot('Con actividad'):,}"
+    def c_kpi_num(): return f"{c_ind()['num']:,}"
     @render.text
-    def c_kpi_num_nota(): return "Alumnos únicos por periodo"
+    def c_kpi_num_nota(): return c_ind()["nota_num"]
     @render.text
-    def c_kpi_den(): return f"{_tot('Matriculados'):,}"
+    def c_kpi_den(): return f"{c_ind()['den']:,}"
     @render.text
-    def c_kpi_den_nota():
-        r = c_res()
-        return ("Incluye respaldo de la base en algún periodo"
-                if (r["Fuente"] != "Transparencia UCSP").any() else "Fuente: Transparencia UCSP")
+    def c_kpi_den_nota(): return c_ind()["nota_den"]
     @render.text
-    def c_kpi_ce(): return f"{_tot('Clase Espejo'):,}"
+    def c_kpi_ce(): return f"{c_ind()['tipos']['Clase Espejo']:,}"
     @render.text
-    def c_kpi_ce_nota(): return f"{_pct(_tot('Clase Espejo'))} de los matriculados"
+    def c_kpi_ce_nota(): return f"{_pct(c_ind()['tipos']['Clase Espejo'])} del denominador"
     @render.text
-    def c_kpi_coil(): return f"{_tot('COIL'):,}"
+    def c_kpi_coil(): return f"{c_ind()['tipos']['COIL']:,}"
     @render.text
-    def c_kpi_coil_nota(): return f"{_pct(_tot('COIL'))} de los matriculados"
+    def c_kpi_coil_nota(): return f"{_pct(c_ind()['tipos']['COIL'])} del denominador"
     @render.text
-    def c_kpi_pv(): return f"{_tot('Profesor Visitante'):,}"
+    def c_kpi_pv(): return f"{c_ind()['tipos']['Profesor Visitante']:,}"
     @render.text
-    def c_kpi_pv_nota(): return f"{_pct(_tot('Profesor Visitante'))} de los matriculados"
+    def c_kpi_pv_nota(): return f"{_pct(c_ind()['tipos']['Profesor Visitante'])} del denominador"
 
     @render.ui
     def c_g_pct():
