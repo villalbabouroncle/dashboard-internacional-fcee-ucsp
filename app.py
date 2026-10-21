@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Dashboard de Movilidad Estudiantil UCSP (Saliente y Entrante)
+Dashboard "Internacionalización FCEE" – Universidad Católica San Pablo
 Shiny for Python  ·  ejecutar con:  shiny run app.py --reload
 
 Lee la base directamente desde Google Drive cada vez que se abre
@@ -540,6 +540,188 @@ ESCALA_NARANJA = [[0, T["escala_e"][0]], [1, T["escala_e"][1]]]
 ESCALA_VERDE = [[0, T["escala_d"][0]], [1, T["escala_d"][1]]]
 
 # ─────────────────────────────────────────────────────────────
+# HOJAS DE RUTA DE INTERNACIONALIZACIÓN (transcritas de los Word de cada programa)
+# Para actualizar el texto o las metas, edita este bloque.
+# "medida" enlaza la estrategia con un dato que el dashboard ya calcula:
+#   movilidad = estudiantes en movilidad saliente en el año · pct_curricula = % alumnos con
+#   experiencias de internacionalización · cursos = cursos con clase espejo / COIL / prof. visitante
+# ─────────────────────────────────────────────────────────────
+_PILARES_UCSP = [
+    ("🌎", "Abiertos al mundo", "Conocimiento"),
+    ("🤝", "Interactuando con el mundo", "Experiencia"),
+    ("💡", "Comprometidos con el mundo", "Propuesta / Innovación"),
+]
+
+RUTAS = {
+    "ADM": dict(
+        programa="Administración de Negocios",
+        escuela="Administración de Negocios",
+        info=[("Facultad", "Ciencias Económicas y Empresariales"),
+              ("Escuela profesional", "Administración de Negocios"),
+              ("Programa de estudios", "Carrera Profesional de Administración de Negocios"),
+              ("Modalidad", "Presencial")],
+        perfil_intro=("La Escuela Profesional de Administración de Negocios de la Universidad Católica San Pablo "
+                      "forma personas que en su desempeño profesional sean capaces de investigar, analizar, organizar, "
+                      "planear, dirigir y ejecutar las actividades en las organizaciones profundizando en diversas áreas "
+                      "del saber, teniendo así una mirada completa de la realidad, o que le permitirá juzgar las realidades "
+                      "particulares desde una cosmovisión formada en diálogo fe – razón; tanto en el campo privado como en "
+                      "el estatal, en el ámbito nacional e internacional; todo esto, con el propósito de servicio al bien común."),
+        perfil_mision=("Formar profesionales íntegros en administración de empresas en Arequipa, en un ambiente de "
+                       "respeto y exigencia académica, humanística y ética."),
+        perfil_lista_titulo="Quienes deciden estudiar Administración de Negocios poseen las siguientes características:",
+        perfil_lista=[
+            "Una personalidad y competencias profesionales basadas en valores éticos y en el consciente ejercicio de "
+            "virtudes como la justicia y la prudencia, indispensables para el desempeño de su profesión y para su "
+            "despliegue personal.",
+            "Tiene conocimientos sólidos y específicos sobre gestión y análisis de datos para la toma de decisiones.",
+            "Muestra capacidad de emprendimiento y flexibilidad ante los cambios.",
+            "Es persistente en el logro de objetivos.",
+            "Tiene profunda conciencia social y respeto por el medio ambiente y la persona humana.",
+            "Tiene liderazgo y la capacidad de trabajar en equipo.",
+        ],
+        fortalezas=[
+            "Experiencia previa en clases espejo y COIL (aunque no sistematizada).",
+            "Perfil de carrera con enfoque en gestión, liderazgo y toma de decisiones, fácilmente internacionalizable.",
+            "Existencia de redes académicas potenciales (ej. CLADEA, convenios UCSP).",
+            "Interés de docentes en colaboración internacional.",
+        ],
+        oportunidades=[
+            "Débil institucionalización de experiencias internacionales (COIL, clases espejo).",
+            "Falta de estrategia clara de internacionalización por cursos.",
+            "Oportunidad de potenciar cursos dictados en inglés o bilingües.",
+            "Capacitación en metodologías de internacionalización a los docentes.",
+        ],
+        objetivos=[
+            "Fortalecer la dimensión internacional del proceso formativo mediante la incorporación de contenidos, "
+            "metodologías y experiencias internacionales en áreas como gestión y estrategia, marketing, finanzas, "
+            "emprendimiento, gobierno de personas, promoviendo competencias globales en entornos empresariales.",
+            "Desarrollar alianzas estratégicas con universidades y organizaciones internacionales para impulsar la "
+            "cooperación académica, investigación aplicada y actualización en tendencias globales de negocios.",
+            "Incrementar la participación de estudiantes y docentes en actividades como clases espejo, COIL, movilidad "
+            "académica, prácticas internacionales y proyectos colaborativos.",
+        ],
+        estrategias=[
+            (1, "Meso", "Definición de cursos con enfoque global e intercultural en los cuales se incorporen casos y metodologías internacionales y IFRS.",
+             "# cursos con enfoque global e intercultural", ["2", "3", "4"], "Dirección de Escuela", "Requiere capacitación docente", None),
+            (1, "Meso", "Implementar COIL y clases espejo en cursos clave (marketing, estrategia, RRHH, finanzas).",
+             "# de cursos diseñados para experiencias de internacionalización (COIL, clases espejo, profesor visitante)",
+             ["20", "25", "30"], "Líder Internacionalización", "Priorizar cursos núcleo", "cursos"),
+            (1, "Meso", "Incorporar cursos al programa de bilingüismo institucional.",
+             "# de cursos dentro del programa de bilingüismo", ["2", "3", "4"], "Dirección de Escuela", "Enfoque progresivo", None),
+            (1, "Meso", "Formación docente para internacionalización (capacitaciones en COIL, metodologías globales, inglés académico).",
+             "% de docentes capacitados", ["25%", "40%", "60%"], "Líder Internacionalización", "Clave para sostenibilidad", None),
+            (2, "Meso", "Diseñar y consolidar alianzas estratégicas con universidades extranjeras.",
+             "# de alianzas estratégicas ejecutadas", ["3", "4", "5"], "Dirección de Escuela", "Priorizar LATAM + Europa", None),
+            (2, "Meso", "Incorporar docentes internacionales en actividades académicas (clases, seminarios, investigación).",
+             "# de docentes internacionales participantes", ["3", "5", "7"], "Líder Internacionalización", "Puede ser virtual", None),
+            (3, "Meso", "Diseñar e implementar un sistema estructurado de difusión y acceso a oportunidades de internacionalización para estudiantes.",
+             "# de estudiantes que participaron en movilidad internacional saliente", ["10", "12", "14"],
+             "Líder Internacionalización", "Uso de canales digitales", "movilidad"),
+            (3, "Meso", "Optimizar procesos de internacionalización.",
+             "% de satisfacción de estudiantes sobre información y procesos", ["70%", "80%", "90%"],
+             "Líder Internacionalización", "Medición con encuestas", None),
+            (3, "Micro", "Implementar experiencias COIL, clases espejo y otras experiencias internacionales en cursos definidos.",
+             "% de estudiantes con experiencias de internacionalización (clases espejo, COIL, profesor visitante)",
+             ["30%", "40%", "50%"], "Líder de Internacionalización DCEE", "", "pct_curricula"),
+            (3, "Meso", "Diseñar e implementar un sistema estructurado de difusión y acceso a oportunidades de internacionalización para profesores.",
+             "# de docentes que participó de movilidad docente / pasantías / misiones académicas", ["1", "2", "3"],
+             "Líder Internacionalización", "Incentivar participación", None),
+            (3, "Micro", "Desarrollar investigaciones colaborativas internacionales en gestión y negocios.",
+             "# de investigaciones internacionales realizadas", ["1", "2", "3"],
+             "Líder Internacionalización / Investigación DCEE", "Vincular con redes", None),
+        ],
+    ),
+    "CONT": dict(
+        programa="Contabilidad",
+        escuela="Contabilidad",
+        info=[("Facultad", "Ciencias Económicas y Empresariales"),
+              ("Escuela profesional", "Contabilidad"),
+              ("Programa de estudios", "Carrera Profesional de Contabilidad"),
+              ("Modalidad", "Presencial")],
+        perfil_intro=("La Escuela Profesional de Contabilidad de la Universidad Católica San Pablo forma personas que en su "
+                      "desempeño profesional son capaces de identificar, analizar, medir y controlar la información de "
+                      "carácter contable, financiero y tributario en las organizaciones. Así, permiten a quienes toman "
+                      "decisiones, considerar los diversos factores y riesgos que conlleva la gestión económica empresarial "
+                      "en el marco de su servicio al bien común."),
+        perfil_mision="",
+        perfil_lista_titulo="El profesional en Contabilidad posee las siguientes características:",
+        perfil_lista=[
+            "Posee una personalidad y una competencia profesional basadas en virtudes como la justicia y la prudencia, y "
+            "en el consciente ejercicio de la profesión, anteponiendo el valor de la fe pública de la información en el "
+            "contexto del bien común.",
+            "Tiene conocimientos específicos y profundos sobre contabilidad financiera, auditoría, y tributación.",
+            "Está preparado para el análisis de datos y manejo de lenguajes de programación abordando de manera "
+            "responsable los desafíos organizacionales.",
+            "Tiene sólidos conocimientos en finanzas.",
+            "Posee capacidad de cooperación, comunicación asertiva, proactividad y compromiso con el aprendizaje "
+            "constante y reflexivo.",
+            "Muestra dominio del sistema tributario nacional no solo en lo que respecta a su cumplimiento, sino también a "
+            "las alternativas que este ofrece para la toma de decisiones, mediante una adecuada planificación tributaria "
+            "nacional e internacional.",
+            "Está preparado para sistematizar y analizar información financiera, económica y legal para la planificación, "
+            "el control, la evaluación y la toma de decisiones, por medio de la destreza en el conocimiento y el manejo de "
+            "herramientas, y la apertura a un marco mayor de conocimientos y saberes.",
+        ],
+        fortalezas=[
+            "Profesores en empresas globales importantes.",
+            "Experiencia previa en clases espejo, COIL y profesores visitantes.",
+            "Redes académicas internacionales: miembro y en proceso de acreditación con ACBSP y pertenencia a CLADEA.",
+        ],
+        oportunidades=[
+            "Baja movilidad estudiantil, tanto entrante como saliente.",
+            "Poca producción en investigación.",
+            "Débil consolidación de convenios internacionales.",
+            "Baja disponibilidad de financiamiento para movilidad por parte de estudiantes.",
+            "Falta de bilingüismo en el plan de formación.",
+        ],
+        objetivos=[
+            "Fortalecer la dimensión internacional del proceso formativo de la Carrera Profesional de Contabilidad mediante "
+            "la integración sistemática de experiencias académicas internacionales e interculturales en el currículo, "
+            "promoviendo el desarrollo de competencias globales en contabilidad, auditoría, tributación y finanzas, con "
+            "énfasis en normas internacionales (IFRS), herramientas digitales y principios éticos.",
+            "Impulsar la vinculación académica del programa con universidades, docentes y entornos profesionales "
+            "internacionales, mediante el desarrollo de alianzas estratégicas sostenibles que favorezcan la cooperación, "
+            "la investigación conjunta, la innovación y la actualización disciplinar en contabilidad, tributación, "
+            "auditoría y finanzas.",
+            "Promover la participación progresiva de estudiantes y docentes en actividades de internacionalización, tales "
+            "como clases espejo, COIL, movilidad académica, investigación colaborativa y eventos internacionales, "
+            "incrementando su exposición a contextos globales y fortaleciendo su perfil académico y profesional.",
+        ],
+        estrategias=[
+            (1, "Meso", "Definición de cursos con enfoque global e intercultural en los cuales se incorporen casos y metodologías internacionales y IFRS.",
+             "# cursos con enfoque global e intercultural", ["2", "3", "4"], "Dirección de Escuela", "Requiere capacitación docente", None),
+            (1, "Micro", "Implementar COIL y clases espejo en cursos clave (marketing, estrategia, RRHH, finanzas).",
+             "# de cursos diseñados para experiencias de internacionalización (COIL, clases espejo, profesor visitante)",
+             ["5", "7", "10"], "Líder de Internacionalización DCEE", "Priorizar cursos núcleo", "cursos"),
+            (1, "Meso", "Incorporación de cursos al programa de bilingüismo institucional.",
+             "# cursos dentro del programa de bilingüismo", ["3", "4", "5"], "Dirección de Escuela", "Enfoque progresivo", None),
+            (1, "Micro", "Formación docente para internacionalización (capacitaciones en COIL, metodologías globales, inglés académico).",
+             "% de docentes capacitados", ["25%", "40%", "60%"], "Líder de Internacionalización DCEE", "Clave para sostenibilidad", None),
+            (2, "Meso", "Diseñar y consolidar alianzas estratégicas con universidades extranjeras.",
+             "# alianzas estratégicas ejecutadas", ["3", "4", "5"], "Dirección de Escuela", "Priorizar LATAM + Europa", None),
+            (2, "Meso", "Incorporar docentes internacionales en actividades académicas (clases, seminarios, investigación).",
+             "# docentes internacionales", ["3", "5", "7"], "Líder de Internacionalización DCEE", "Puede ser virtual", None),
+            (3, "Meso", "Diseñar e implementar un sistema estructurado de difusión y acceso a oportunidades de internacionalización para estudiantes.",
+             "# de estudiantes que participó de movilidad internacional", ["2", "3", "4"],
+             "Líder de Internacionalización DCEE", "Uso de canales digitales", "movilidad"),
+            (3, "Meso", "Optimizar procesos de internacionalización.",
+             "% satisfacción de estudiantes sobre información y procesos de internacionalización", ["70%", "80%", "90%"],
+             "Líder de Internacionalización DCEE", "Medición con encuestas", None),
+            (3, "Micro", "Implementar experiencias COIL, clases espejo y otras experiencias internacionales en cursos definidos.",
+             "% de estudiantes con experiencias de internacionalización (clases espejo, COIL, profesor visitante)",
+             ["30%", "40%", "50%"], "Líder de Internacionalización DCEE", "", "pct_curricula"),
+            (3, "Meso", "Diseñar e implementar un sistema estructurado de difusión y acceso a oportunidades de internacionalización para profesores.",
+             "# de docentes que participó de movilidad docente / pasantías / misiones académicas", ["1", "2", "3"],
+             "Líder de Internacionalización DCEE", "Incentivar participación", None),
+            (3, "Micro", "Desarrollar investigaciones colaborativas internacionales.",
+             "# de investigaciones internacionales realizadas", ["1", "2", "3"],
+             "Líder Internacionalización / Investigación DCEE", "Vincular con redes", None),
+        ],
+    ),
+}
+
+
+# ─────────────────────────────────────────────────────────────
 # INTERFAZ
 # ─────────────────────────────────────────────────────────────
 def multi(id_, etiqueta):
@@ -896,7 +1078,217 @@ panel_docentes = ui.nav_panel(
     ui.navset_underline(panel_curricula, id="sub_docentes"),
 )
 
+# ---------- INICIO: Presentación y Hojas de ruta ----------
+def _ul(items, icono, clase=""):
+    return ui.tags.ul(*[ui.tags.li(ui.span(icono, class_="li-ico"), ui.span(t)) for t in items],
+                      class_=f"lista-ico {clase}")
+
+
+def _seccion(titulo, *hijos, subtitulo=None):
+    cab = [ui.h4(titulo, class_="sec-titulo")]
+    if subtitulo:
+        cab.append(ui.p(subtitulo, class_="sec-sub"))
+    return ui.div(*cab, *hijos, class_="seccion")
+
+
+def _tarjeta_seccion(icono, ruta, titulo, texto):
+    return ui.div(
+        ui.div(icono, class_="sc-ico"),
+        ui.div(ruta, class_="sc-ruta"),
+        ui.h5(titulo, class_="sc-titulo"),
+        ui.p(texto, class_="sc-texto"),
+        class_="sc-card",
+    )
+
+
+panel_presentacion = ui.nav_panel(
+    "Presentación",
+    ui.div(
+        ui.div(
+            ui.div("Universidad Católica San Pablo · Facultad de Ciencias Económicas y Empresariales", class_="hero-kicker"),
+            ui.h1("Internacionalización FCEE", class_="hero-titulo"),
+            ui.p("Dashboard de indicadores de internacionalización de las escuelas profesionales de "
+                 "Administración de Negocios y Contabilidad: movilidad estudiantil, internacionalización de la "
+                 "currícula y actividades internacionales de los docentes, en un solo lugar y con datos que se "
+                 "actualizan automáticamente.", class_="hero-texto"),
+            ui.div(ui.span("🎓 Alumnos", class_="hero-chip"), ui.span("👩‍🏫 Docentes", class_="hero-chip"),
+                   ui.span("🧭 Hojas de ruta 2027–2029", class_="hero-chip"), ui.span("🔄 Datos en línea", class_="hero-chip"),
+                   class_="hero-chips"),
+            class_="hero",
+        ),
+        _seccion(
+            "La internacionalización en cifras",
+            ui.layout_column_wrap(
+                kpi("Movilidades salientes", "p_kpi_sal", "Estudiantes UCSP que salieron de intercambio (todos los periodos)."),
+                kpi("Estudiantes visitantes", "p_kpi_ent", "Estudiantes de otras universidades que estudiaron en la UCSP."),
+                kpi("Actividades docentes", "p_kpi_doc", "Clases espejo, COIL y profesores visitantes (todos los periodos)."),
+                kpi("Alumnos con experiencia internacional", "p_kpi_cur",
+                    "% de matriculados de ADM y CONT con alguna actividad en el último periodo.", "p_kpi_cur_nota"),
+                width=1 / 4, fill=False,
+            ),
+            subtitulo="Resumen general con los datos actuales. El detalle está en cada pestaña.",
+        ),
+        _seccion(
+            "¿Para qué sirve este dashboard?",
+            ui.div(
+                ui.div(ui.div("📊", class_="pq-ico"), ui.h5("Medir"),
+                       ui.p("Reúne en indicadores claros la información de movilidad, currícula y actividades "
+                            "docentes que antes estaba en varias bases y hojas de cálculo."), class_="pq-card"),
+                ui.div(ui.div("🎯", class_="pq-ico"), ui.h5("Dar seguimiento"),
+                       ui.p("Permite comparar los resultados con las metas de las hojas de ruta de "
+                            "internacionalización de cada programa."), class_="pq-card"),
+                ui.div(ui.div("🔎", class_="pq-ico"), ui.h5("Explorar"),
+                       ui.p("Con los filtros se puede ver cualquier periodo, escuela, país, universidad, docente "
+                            "o tipo de actividad, y descargar el detalle."), class_="pq-card"),
+                ui.div(ui.div("🤝", class_="pq-ico"), ui.h5("Compartir"),
+                       ui.p("Ofrece a directores y docentes una misma fuente de información, siempre actualizada "
+                            "y sin datos personales de los alumnos."), class_="pq-card"),
+                class_="pq-grid",
+            ),
+        ),
+        _seccion(
+            "¿Qué encontrarás en cada pestaña?",
+            ui.div(
+                _tarjeta_seccion("🧭", "Inicio", "Hojas de ruta",
+                                 "Diagnóstico, objetivos, estrategias y metas 2027–2029 de internacionalización de "
+                                 "Administración de Negocios y de Contabilidad, con el avance actual de los "
+                                 "indicadores que el dashboard puede medir."),
+                _tarjeta_seccion("✈️", "Indicadores de Alumnos", "Movilidad saliente",
+                                 "Estudiantes UCSP que realizaron intercambio: evolución por periodo, países y "
+                                 "universidades de destino, modalidad y concepto."),
+                _tarjeta_seccion("🛬", "Indicadores de Alumnos", "Movilidad entrante",
+                                 "Estudiantes de otras universidades que estudiaron en la UCSP: países, "
+                                 "universidades de origen, carreras y convenios."),
+                _tarjeta_seccion("📚", "Indicadores de Alumnos", "Internacionalización de la Currícula",
+                                 "% de alumnos que participaron en clases espejo, COIL o con profesores visitantes "
+                                 "respecto de los matriculados, por periodo y escuela."),
+                _tarjeta_seccion("👩‍🏫", "Indicadores de Docentes", "Internacionalización de la Currícula",
+                                 "Actividades internacionales de los docentes: clases espejo, COIL, profesores "
+                                 "visitantes, universidades socias y detalle de cada actividad."),
+                class_="sc-grid",
+            ),
+        ),
+        _seccion(
+            "Cómo usarlo",
+            ui.div(
+                ui.div(ui.strong("Filtros"), ui.span(" — en el panel izquierdo de cada pestaña: periodo desde/hasta, "
+                                                     "escuela, país, etc. Se aplican a todo lo que ves en esa pestaña."), class_="tip"),
+                ui.div(ui.strong("Gráficos"), ui.span(" — pasa el mouse sobre una barra o país para ver el valor exacto; "
+                                                      "con el ícono ⤢ se amplían a pantalla completa."), class_="tip"),
+                ui.div(ui.strong("Notas en gris"), ui.span(" — explican de dónde salen los datos y cómo se calcula "
+                                                           "cada indicador."), class_="tip"),
+                ui.div(ui.strong("Descargar"), ui.span(" — las tablas de detalle se pueden filtrar y descargar en CSV."), class_="tip"),
+                ui.div(ui.strong("Actualizar"), ui.span(" — los datos se leen de las bases en Google Drive cada 10 minutos; "
+                                                        "el botón ↻ Actualizar datos fuerza la lectura."), class_="tip"),
+                class_="tips",
+            ),
+        ),
+        ui.div(
+            ui.div("SV", class_="autor-avatar"),
+            ui.div(
+                ui.div("Desarrollado por", class_="autor-kicker"),
+                ui.div("Sebastián David Villalba Bouroncle", class_="autor-nombre"),
+                ui.div("Profesor Tiempo Completo · Facultad de Ciencias Económicas y Empresariales", class_="autor-cargo"),
+                ui.div("Universidad Católica San Pablo · Arequipa, Perú", class_="autor-cargo"),
+            ),
+            class_="autor",
+        ),
+        class_="inicio-wrap",
+    ),
+)
+
+
+def panel_ruta(k):
+    R = RUTAS[k]
+    n_med = sum(1 for e in R["estrategias"] if e[7])
+    n_meso = sum(1 for e in R["estrategias"] if e[1] == "Meso")
+    pid = k.lower()
+    return ui.nav_panel(
+        f"Hoja de Ruta {R['programa']}",
+        ui.div(
+            ui.div(
+                ui.div("Ruta de Internacionalización · Metas 2027 – 2029", class_="hero-kicker"),
+                ui.h1(f"Programa Profesional de {R['programa']}", class_="hero-titulo"),
+                ui.div(*[ui.span(ui.span(f"{a}: ", class_="chip-k"), b, class_="hero-chip") for a, b in R["info"]],
+                       class_="hero-chips"),
+                class_="hero",
+            ),
+            ui.div(
+                ui.div(ui.div(str(len(R["objetivos"])), class_="mini-num"), ui.div("objetivos", class_="mini-lbl"), class_="mini"),
+                ui.div(ui.div(str(len(R["estrategias"])), class_="mini-num"), ui.div("estrategias", class_="mini-lbl"), class_="mini"),
+                ui.div(ui.div(f"{n_meso} / {len(R['estrategias']) - n_meso}", class_="mini-num"),
+                       ui.div("nivel meso / micro", class_="mini-lbl"), class_="mini"),
+                ui.div(ui.div(str(n_med), class_="mini-num"),
+                       ui.div("metas medidas en vivo por el dashboard", class_="mini-lbl"), class_="mini"),
+                class_="mini-grid",
+            ),
+            _seccion(
+                "Perfil global",
+                ui.layout_columns(
+                    ui.div(
+                        ui.h5("Perfil de egreso del programa"),
+                        ui.p(R["perfil_intro"]),
+                        ui.p(ui.em(R["perfil_mision"])) if R["perfil_mision"] else None,
+                        ui.p(ui.strong(R["perfil_lista_titulo"])),
+                        _ul(R["perfil_lista"], "◆", "lista-perfil"),
+                        class_="bloque",
+                    ),
+                    ui.div(
+                        ui.h5("Perfil global UCSP"),
+                        *[ui.div(ui.div(ic, class_="pilar-ico"),
+                                 ui.div(ui.div(t, class_="pilar-t"), ui.div(sub, class_="pilar-s")), class_="pilar")
+                          for ic, t, sub in _PILARES_UCSP],
+                        class_="bloque",
+                    ),
+                    col_widths=(8, 4),
+                ),
+            ),
+            _seccion(
+                "Diagnóstico de internacionalización",
+                ui.layout_columns(
+                    ui.div(ui.h5("✅ Fortalezas"), _ul(R["fortalezas"], "✓", "lista-ok"), class_="bloque bloque-ok"),
+                    ui.div(ui.h5("⚠️ Oportunidades de mejora"), _ul(R["oportunidades"], "▲", "lista-warn"),
+                           class_="bloque bloque-warn"),
+                    col_widths=(6, 6),
+                ),
+            ),
+            _seccion(
+                "Objetivos de internacionalización del programa",
+                ui.div(*[ui.div(ui.div(str(i + 1), class_="obj-num"), ui.p(o), class_="obj-card")
+                         for i, o in enumerate(R["objetivos"])], class_="obj-grid"),
+            ),
+            _seccion(
+                "Estrategias y metas",
+                ui.div(
+                    ui.input_radio_buttons(f"hr_{pid}_obj", "Objetivo", inline=True,
+                                           choices={"0": "Todos", "1": "Obj. 1", "2": "Obj. 2", "3": "Obj. 3"}),
+                    ui.input_radio_buttons(f"hr_{pid}_niv", "Nivel", inline=True,
+                                           choices={"": "Todos", "Meso": "Meso", "Micro": "Micro"}),
+                    ui.input_checkbox(f"hr_{pid}_med", "Solo metas medidas por el dashboard", False),
+                    class_="filtros-ruta",
+                ),
+                ui.output_ui(f"hr_{pid}_estr"),
+                ui.p("ⓘ Las barras comparan las metas de 2027, 2028 y 2029 de cada estrategia. Donde dice "
+                     "«Situación actual», el valor se calcula en vivo con los datos de este dashboard: movilidad "
+                     "saliente (estudiantes de la escuela en el último año con datos), % de alumnos con experiencias "
+                     "internacionales (último periodo de la currícula) y cursos con clase espejo, COIL o profesor "
+                     "visitante (último año con datos de la base docente).", class_="leyenda-suelta"),
+                subtitulo="Filtra por objetivo o nivel. Cada tarjeta muestra el indicador, las metas por año y el responsable.",
+            ),
+            ui.p(f"Fuente: documento «Ruta de Internacionalización del Programa Profesional de {R['programa']}».",
+                 class_="leyenda-suelta"),
+            class_="inicio-wrap",
+        ),
+    )
+
+
+panel_inicio = ui.nav_panel(
+    "Inicio",
+    ui.navset_underline(panel_presentacion, panel_ruta("ADM"), panel_ruta("CONT"), id="sub_inicio"),
+)
+
 app_ui = ui.page_navbar(
+    panel_inicio,
     ui.nav_panel(
         "Indicadores de Alumnos",
         ui.navset_underline(panel_saliente, panel_entrante, panel_curr_alumnos, id="sub_alumnos"),
@@ -905,8 +1297,8 @@ app_ui = ui.page_navbar(
     ui.nav_spacer(),
     ui.nav_control(ui.input_action_button("recargar", "↻ Actualizar datos",
                                           class_="btn-sm btn-light")),
-    title="Indicadores de Internacionalización FCEE",
-    window_title="Indicadores de Internacionalización FCEE",
+    title="Internacionalización FCEE",
+    window_title="Internacionalización FCEE",
     footer=ui.div(ui.output_text("estado"), class_="text-muted small px-4 py-2"),
     fillable=False,
     header=ui.TagList(
@@ -928,9 +1320,9 @@ app_ui = ui.page_navbar(
         .navbar .nav-link.active {{ border-bottom: 2px solid {T['acento'] if T['barra'] in ('#ffffff',) else T['barra_texto']}; }}
         .navbar-brand {{ font-weight: 600; }}
         .navbar .btn {{ border:1px solid {T['grilla']}; }}
-        #sub_alumnos, #sub_docentes {{ padding: .75rem 1rem 0; background:{T['superficie']}; border-bottom:1px solid {T['grilla']}; }}
-        #sub_alumnos .nav-link, #sub_docentes .nav-link {{ color:{T['tinta_2']} !important; font-weight:500; }}
-        #sub_alumnos .nav-link.active, #sub_docentes .nav-link.active {{ color:{T['tinta']} !important; border-bottom-color:{T['acento']}; }}
+        #sub_inicio, #sub_alumnos, #sub_docentes {{ padding: .75rem 1rem 0; background:{T['superficie']}; border-bottom:1px solid {T['grilla']}; }}
+        #sub_inicio .nav-link, #sub_alumnos .nav-link, #sub_docentes .nav-link {{ color:{T['tinta_2']} !important; font-weight:500; }}
+        #sub_inicio .nav-link.active, #sub_alumnos .nav-link.active, #sub_docentes .nav-link.active {{ color:{T['tinta']} !important; border-bottom-color:{T['acento']}; }}
         .card-header .form-group {{ margin-bottom: 0; }}
         .kpi-nota {{ font-size: .72rem; color:{T['nota_texto']}; background:{T['nota_fondo']};
                      border-radius: 6px; padding: .35rem .5rem; margin: .5rem 0 0; line-height: 1.25; }}
@@ -943,6 +1335,84 @@ app_ui = ui.page_navbar(
         .btn-outline-secondary {{ color:{T['tinta_2']}; border-color:{T['grilla']}; }}
         .btn-outline-secondary:hover {{ background:{T['nota_fondo']}; color:{T['tinta']}; }}
         .form-check-input:checked {{ background-color:{T['acento']}; border-color:{T['acento']}; }}
+        /* ---- Inicio ---- */
+        .inicio-wrap {{ max-width: 1280px; margin: 0 auto; padding: 1.25rem 1rem 2rem; }}
+        .hero {{ border-radius: 18px; padding: 2.2rem 2.4rem; color:#fff; margin-bottom: 1.5rem;
+                 background: radial-gradient(circle at 85% 15%, rgba(255,255,255,.18), transparent 40%),
+                             linear-gradient(135deg, {T['acento']}, color-mix(in srgb, {T['acento']} 35%, #000)); }}
+        .hero-kicker {{ text-transform: uppercase; letter-spacing: .08em; font-size: .78rem; opacity: .85; }}
+        .hero-titulo {{ font-size: 2.4rem; font-weight: 700; margin: .4rem 0 .6rem; color:#fff; }}
+        .hero-texto {{ font-size: 1.05rem; max-width: 820px; opacity: .95; }}
+        .hero-chips {{ display:flex; flex-wrap:wrap; gap:.5rem; margin-top: 1rem; }}
+        .hero-chip {{ background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.25);
+                      border-radius: 999px; padding: .3rem .8rem; font-size: .85rem; }}
+        .chip-k {{ opacity: .75; }}
+        .seccion {{ margin: 1.75rem 0; }}
+        .sec-titulo {{ font-weight: 700; margin-bottom: .25rem; color:{T['tinta']}; }}
+        .sec-sub {{ color:{T['tinta_2']}; font-size: .9rem; margin-bottom: .9rem; }}
+        .pq-grid, .sc-grid, .obj-grid {{ display:grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin-top:.75rem; }}
+        .pq-card, .sc-card, .obj-card, .bloque, .estr-card, .mini {{ background:{T['superficie']}; border:1px solid {T['grilla']};
+                     border-radius: 14px; padding: 1.1rem 1.2rem; }}
+        .pq-card h5, .sc-titulo, .bloque h5 {{ font-weight: 650; color:{T['tinta']}; }}
+        .pq-card p, .sc-texto, .obj-card p, .bloque p, .lista-ico li {{ color:{T['tinta_2']}; font-size: .92rem; }}
+        .pq-ico, .sc-ico {{ font-size: 1.8rem; margin-bottom: .4rem; }}
+        .sc-card {{ border-top: 3px solid {T['acento']}; transition: transform .15s ease; }}
+        .sc-card:hover, .pq-card:hover, .estr-card:hover {{ transform: translateY(-3px); }}
+        .sc-ruta {{ font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color:{T['acento']}; font-weight: 600; }}
+        .tips {{ display:grid; gap:.6rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-top:.6rem; }}
+        .tip {{ background:{T['nota_fondo']}; color:{T['nota_texto']}; border-radius: 10px; padding: .7rem .9rem; font-size: .88rem; }}
+        .tip strong {{ color:{T['tinta']}; }}
+        .autor {{ display:flex; align-items:center; gap: 1.1rem; margin-top: 2rem; padding: 1.2rem 1.4rem;
+                  border-radius: 16px; background:{T['superficie']}; border:1px solid {T['grilla']}; border-left: 4px solid {T['acento']}; }}
+        .autor-avatar {{ width: 64px; height: 64px; border-radius: 50%; display:flex; align-items:center; justify-content:center;
+                         font-weight: 700; font-size: 1.3rem; color:#fff; background:{T['acento']}; flex: none; }}
+        .autor-kicker {{ font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color:{T['tinta_2']}; }}
+        .autor-nombre {{ font-size: 1.2rem; font-weight: 700; color:{T['tinta']}; }}
+        .autor-cargo {{ font-size: .9rem; color:{T['tinta_2']}; }}
+        .mini-grid {{ display:grid; gap: .8rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }}
+        .mini {{ text-align:center; padding: .9rem; }}
+        .mini-num {{ font-size: 1.8rem; font-weight: 700; color:{T['acento']}; }}
+        .mini-lbl {{ font-size: .82rem; color:{T['tinta_2']}; }}
+        .lista-ico {{ list-style: none; padding-left: 0; margin: 0; }}
+        .lista-ico li {{ display:flex; gap:.6rem; margin-bottom: .55rem; line-height: 1.4; }}
+        .li-ico {{ flex: none; width: 1.2rem; text-align:center; color:{T['acento']}; font-weight: 700; }}
+        .lista-ok .li-ico {{ color:#2fbf71; }}
+        .lista-warn .li-ico {{ color:#e3a008; }}
+        .bloque-ok {{ border-top: 3px solid #2fbf71; }}
+        .bloque-warn {{ border-top: 3px solid #e3a008; }}
+        .pilar {{ display:flex; gap:.8rem; align-items:center; padding:.75rem; border-radius: 12px;
+                  background:{T['nota_fondo']}; margin-bottom:.6rem; }}
+        .pilar-ico {{ font-size: 1.6rem; }}
+        .pilar-t {{ font-weight: 650; color:{T['tinta']}; }}
+        .pilar-s {{ font-size: .82rem; color:{T['tinta_2']}; }}
+        .obj-card {{ display:flex; gap: .9rem; align-items:flex-start; }}
+        .obj-num {{ flex:none; width: 2.4rem; height: 2.4rem; border-radius: 50%; background:{T['acento']}; color:#fff;
+                    display:flex; align-items:center; justify-content:center; font-weight: 700; font-size: 1.1rem; }}
+        .filtros-ruta {{ display:flex; flex-wrap:wrap; gap: 1.5rem; align-items:flex-end; padding: .8rem 1rem;
+                         background:{T['superficie']}; border:1px solid {T['grilla']}; border-radius: 12px; margin-bottom: 1rem; }}
+        .filtros-ruta .form-group, .filtros-ruta .shiny-input-container {{ margin-bottom: 0; width:auto; }}
+        .estr-grid {{ display:grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); }}
+        .estr-card {{ display:flex; flex-direction:column; gap:.6rem; transition: transform .15s ease; }}
+        .estr-top {{ display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; }}
+        .tag {{ font-size: .72rem; font-weight: 600; border-radius: 999px; padding: .15rem .6rem; }}
+        .tag-obj {{ background:{T['acento']}; color:#fff; }}
+        .tag-niv {{ border:1px solid {T['grilla']}; color:{T['tinta_2']}; }}
+        .tag-med {{ background:#2fbf71; color:#0b2b1b; }}
+        .estr-texto {{ font-weight: 600; color:{T['tinta']}; margin:0; }}
+        .estr-ind {{ font-size: .85rem; color:{T['tinta_2']}; }}
+        .metas {{ display:grid; grid-template-columns: repeat(3, 1fr); gap:.5rem; }}
+        .meta {{ background:{T['nota_fondo']}; border-radius: 10px; padding: .45rem .6rem; }}
+        .meta-anio {{ font-size: .72rem; color:{T['tinta_2']}; }}
+        .meta-val {{ font-size: 1.15rem; font-weight: 700; color:{T['tinta']}; }}
+        .meta-barra {{ height: 6px; border-radius: 4px; background:{T['grilla']}; margin-top:.3rem; overflow:hidden; }}
+        .meta-barra > div {{ height: 100%; border-radius: 4px; background:{T['acento']}; }}
+        .avance {{ border-radius: 10px; padding: .55rem .7rem; border: 1px dashed #2fbf71; font-size: .85rem; color:{T['tinta']}; }}
+        .avance-barra {{ height: 8px; border-radius: 4px; background:{T['grilla']}; margin-top:.35rem; overflow:hidden; }}
+        .avance-barra > div {{ height:100%; background:#2fbf71; border-radius: 4px; }}
+        .estr-pie {{ display:flex; justify-content:space-between; gap:.5rem; flex-wrap:wrap; font-size: .8rem; color:{T['tinta_2']};
+                     border-top: 1px solid {T['grilla']}; padding-top: .5rem; margin-top:auto; }}
+        .leyenda-suelta {{ font-size: .78rem; color:{T['nota_texto']}; background:{T['nota_fondo']}; border-radius: 10px;
+                           padding: .55rem .8rem; margin-top: 1rem; }}
         #d_detalle td, #c_tabla_grupo td, #c_tabla_per td {{ white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }}
     """)),
 )
@@ -1097,6 +1567,124 @@ def server(input, output, session):
                     Convenio=("Convenio", lambda s: ", ".join(sorted(s.dropna().unique()))))
                .reset_index().sort_values("Estudiantes", ascending=False))
         return render.DataGrid(t, filters=True, width="100%", height="420px")
+
+    # ============ INICIO ============
+    @render.text
+    def p_kpi_sal(): return f"{len(sal()):,}"
+    @render.text
+    def p_kpi_ent(): return f"{len(ent()):,}"
+    @render.text
+    def p_kpi_doc():
+        a = actividades_unicas(doc())
+        return f"{int(a['Tipo'].isin(TIPOS_INDICADOR).sum()):,}"
+
+    @reactive.calc
+    def p_cur_ultimo():
+        base, mat = cur()
+        r = resumen_curricula(base, mat)
+        r = r[r["Periodo"].str.match(r"^\d{4}-\d{2}$")]
+        req(not r.empty)
+        ult = r["Periodo"].max()
+        u = r[r["Periodo"] == ult]
+        return ult, u["Con actividad"].sum() / max(u["Matriculados"].sum(), 1)
+
+    @render.text
+    def p_kpi_cur(): return f"{p_cur_ultimo()[1]:.1%}"
+    @render.text
+    def p_kpi_cur_nota(): return f"Periodo {p_cur_ultimo()[0]}"
+
+    def _num(v):
+        return float(str(v).replace("%", "").strip())
+
+    def _medida(k, medida):
+        """Valor actual de una meta medible: (valor, texto). None si no hay datos."""
+        esc = RUTAS[k]["escuela"]
+        anio_hoy = datetime.now().year
+        try:
+            if medida == "movilidad":
+                s_ = sal()
+                s_ = s_[(s_["Esc. Prof. UCSP"] == esc) & (s_["Año"] <= anio_hoy)]
+                if s_.empty:
+                    return None
+                y = int(s_["Año"].max())
+                n = int((s_["Año"] == y).sum())
+                return n, f"{n} estudiantes en movilidad saliente en {y}"
+            if medida == "pct_curricula":
+                base, mat = cur()
+                r = resumen_curricula(base, mat)
+                r = r[(r["Escuela"] == esc) & r["Periodo"].str.match(r"^\d{4}-\d{2}$")]
+                if r.empty:
+                    return None
+                u = r.sort_values("Periodo").iloc[-1]
+                return u["%"] * 100, f"{u['%']:.1%} de alumnos con experiencias internacionales en {u['Periodo']}"
+            if medida == "cursos":
+                d = doc()
+                d = d[(d["Carrera"] == esc) & d["Tipo"].isin(TIPOS_INDICADOR)
+                      & d["Periodo"].str.match(r"^\d{4}-\d{2}$")]
+                d = d[~d["Curso"].isin(["Sin información", "No aplica"])]
+                anios = d["Periodo"].str[:4].astype(int)
+                d = d[anios <= anio_hoy]
+                if d.empty:
+                    return None
+                y = int(d["Periodo"].str[:4].astype(int).max())
+                n = int(d.loc[d["Periodo"].str.startswith(str(y)), "Curso"].nunique())
+                return n, f"{n} cursos con clase espejo, COIL o profesor visitante en {y}"
+        except Exception:
+            return None
+        return None
+
+    def _estrategias(k):
+        R = RUTAS[k]
+        pid = k.lower()
+        obj = input[f"hr_{pid}_obj"]()
+        niv = input[f"hr_{pid}_niv"]()
+        solo_med = input[f"hr_{pid}_med"]()
+        tarjetas = []
+        for (o, nivel, texto, indicador, metas, resp, obs, medida) in R["estrategias"]:
+            if obj not in ("0", "", None) and str(o) != obj:
+                continue
+            if niv and nivel != niv:
+                continue
+            if solo_med and not medida:
+                continue
+            nums = [_num(m) for m in metas]
+            tope = max(nums) or 1
+            bloques_meta = [
+                ui.div(ui.div(f"Meta {2027 + i}", class_="meta-anio"), ui.div(m, class_="meta-val"),
+                       ui.div(ui.div(style=f"width:{v / tope * 100:.0f}%"), class_="meta-barra"), class_="meta")
+                for i, (m, v) in enumerate(zip(metas, nums))
+            ]
+            tags = [ui.span(f"Objetivo {o}", class_="tag tag-obj"), ui.span(f"Nivel {nivel}", class_="tag tag-niv")]
+            avance = None
+            if medida:
+                tags.append(ui.span("Medido en el dashboard", class_="tag tag-med"))
+                m = _medida(k, medida)
+                if m:
+                    valor, txt = m
+                    pct = valor / nums[0] * 100 if nums[0] else 0
+                    estado = "✓ meta 2027 alcanzada" if pct >= 100 else f"{pct:.0f}% de la meta 2027"
+                    avance = ui.div(ui.strong("Situación actual: "), txt, f" · {estado}",
+                                    ui.div(ui.div(style=f"width:{min(pct, 100):.0f}%"), class_="avance-barra"),
+                                    class_="avance")
+                else:
+                    avance = ui.div("Situación actual: aún no hay datos para calcularla.", class_="avance")
+            tarjetas.append(ui.div(
+                ui.div(*tags, class_="estr-top"),
+                ui.p(texto, class_="estr-texto"),
+                ui.div(ui.strong("Indicador: "), indicador, class_="estr-ind"),
+                ui.div(*bloques_meta, class_="metas"),
+                avance,
+                ui.div(ui.span(f"👤 {resp}"), ui.span(f"📝 {obs}") if obs else None, class_="estr-pie"),
+                class_="estr-card",
+            ))
+        if not tarjetas:
+            return ui.p("No hay estrategias con esos filtros.", class_="sec-sub")
+        return ui.div(*tarjetas, class_="estr-grid")
+
+    @render.ui
+    def hr_adm_estr(): return _estrategias("ADM")
+    @render.ui
+    def hr_cont_estr(): return _estrategias("CONT")
 
     # ============ CURRÍCULA (ALUMNOS) ============
     @reactive.calc
