@@ -547,9 +547,9 @@ ESCALA_VERDE = [[0, T["escala_d"][0]], [1, T["escala_d"][1]]]
 #   experiencias de internacionalización · cursos = cursos con clase espejo / COIL / prof. visitante
 # ─────────────────────────────────────────────────────────────
 _PILARES_UCSP = [
-    ("🌎", "Abiertos al mundo", "Conocimiento"),
-    ("🤝", "Interactuando con el mundo", "Experiencia"),
-    ("💡", "Comprometidos con el mundo", "Propuesta / Innovación"),
+    ("Abiertos al mundo", "Conocimiento"),
+    ("Interactuando con el mundo", "Experiencia"),
+    ("Comprometidos con el mundo", "Propuesta / Innovación"),
 ]
 
 RUTAS = {
@@ -558,8 +558,7 @@ RUTAS = {
         escuela="Administración de Negocios",
         info=[("Facultad", "Ciencias Económicas y Empresariales"),
               ("Escuela profesional", "Administración de Negocios"),
-              ("Programa de estudios", "Carrera Profesional de Administración de Negocios"),
-              ("Modalidad", "Presencial")],
+              ],
         perfil_intro=("La Escuela Profesional de Administración de Negocios de la Universidad Católica San Pablo "
                       "forma personas que en su desempeño profesional sean capaces de investigar, analizar, organizar, "
                       "planear, dirigir y ejecutar las actividades en las organizaciones profundizando en diversas áreas "
@@ -636,8 +635,7 @@ RUTAS = {
         escuela="Contabilidad",
         info=[("Facultad", "Ciencias Económicas y Empresariales"),
               ("Escuela profesional", "Contabilidad"),
-              ("Programa de estudios", "Carrera Profesional de Contabilidad"),
-              ("Modalidad", "Presencial")],
+              ],
         perfil_intro=("La Escuela Profesional de Contabilidad de la Universidad Católica San Pablo forma personas que en su "
                       "desempeño profesional son capaces de identificar, analizar, medir y controlar la información de "
                       "carácter contable, financiero y tributario en las organizaciones. Así, permiten a quienes toman "
@@ -748,7 +746,7 @@ def tarjeta(titulo, salida, texto=None):
     """Gráfico o tabla con su leyenda al pie (fuente y cálculo)."""
     hijos = [ui.card_header(titulo), salida]
     if texto:
-        hijos.append(ui.card_footer(ui.span("ⓘ ", class_="text-muted"), texto, class_="leyenda"))
+        hijos.append(ui.card_footer(texto, class_="leyenda"))
     return ui.card(*hijos, full_screen=True)
 
 
@@ -1079,8 +1077,8 @@ panel_docentes = ui.nav_panel(
 )
 
 # ---------- INICIO: Presentación y Hojas de ruta ----------
-def _ul(items, icono, clase=""):
-    return ui.tags.ul(*[ui.tags.li(ui.span(icono, class_="li-ico"), ui.span(t)) for t in items],
+def _ul(items, clase=""):
+    return ui.tags.ul(*[ui.tags.li(ui.span(class_="li-ico"), ui.span(t)) for t in items],
                       class_=f"lista-ico {clase}")
 
 
@@ -1091,9 +1089,8 @@ def _seccion(titulo, *hijos, subtitulo=None):
     return ui.div(*cab, *hijos, class_="seccion")
 
 
-def _tarjeta_seccion(icono, ruta, titulo, texto):
+def _tarjeta_seccion(ruta, titulo, texto):
     return ui.div(
-        ui.div(icono, class_="sc-ico"),
         ui.div(ruta, class_="sc-ruta"),
         ui.h5(titulo, class_="sc-titulo"),
         ui.p(texto, class_="sc-texto"),
@@ -1111,36 +1108,24 @@ panel_presentacion = ui.nav_panel(
                  "Administración de Negocios y Contabilidad: movilidad estudiantil, internacionalización de la "
                  "currícula y actividades internacionales de los docentes, en un solo lugar y con datos que se "
                  "actualizan automáticamente.", class_="hero-texto"),
-            ui.div(ui.span("🎓 Alumnos", class_="hero-chip"), ui.span("👩‍🏫 Docentes", class_="hero-chip"),
-                   ui.span("🧭 Hojas de ruta 2027–2029", class_="hero-chip"), ui.span("🔄 Datos en línea", class_="hero-chip"),
+            ui.div(ui.span("Alumnos", class_="hero-chip"), ui.span("Docentes", class_="hero-chip"),
+                   ui.span("Hojas de ruta 2027–2029", class_="hero-chip"), ui.span("Datos en línea", class_="hero-chip"),
                    class_="hero-chips"),
             class_="hero",
         ),
         _seccion(
-            "La internacionalización en cifras",
-            ui.layout_column_wrap(
-                kpi("Movilidades salientes", "p_kpi_sal", "Estudiantes UCSP que salieron de intercambio (todos los periodos)."),
-                kpi("Estudiantes visitantes", "p_kpi_ent", "Estudiantes de otras universidades que estudiaron en la UCSP."),
-                kpi("Actividades docentes", "p_kpi_doc", "Clases espejo, COIL y profesores visitantes (todos los periodos)."),
-                kpi("Alumnos con experiencia internacional", "p_kpi_cur",
-                    "% de matriculados de ADM y CONT con alguna actividad en el último periodo.", "p_kpi_cur_nota"),
-                width=1 / 4, fill=False,
-            ),
-            subtitulo="Resumen general con los datos actuales. El detalle está en cada pestaña.",
-        ),
-        _seccion(
             "¿Para qué sirve este dashboard?",
             ui.div(
-                ui.div(ui.div("📊", class_="pq-ico"), ui.h5("Medir"),
+                ui.div(ui.h5("Medir"),
                        ui.p("Reúne en indicadores claros la información de movilidad, currícula y actividades "
                             "docentes que antes estaba en varias bases y hojas de cálculo."), class_="pq-card"),
-                ui.div(ui.div("🎯", class_="pq-ico"), ui.h5("Dar seguimiento"),
+                ui.div(ui.h5("Dar seguimiento"),
                        ui.p("Permite comparar los resultados con las metas de las hojas de ruta de "
                             "internacionalización de cada programa."), class_="pq-card"),
-                ui.div(ui.div("🔎", class_="pq-ico"), ui.h5("Explorar"),
+                ui.div(ui.h5("Explorar"),
                        ui.p("Con los filtros se puede ver cualquier periodo, escuela, país, universidad, docente "
                             "o tipo de actividad, y descargar el detalle."), class_="pq-card"),
-                ui.div(ui.div("🤝", class_="pq-ico"), ui.h5("Compartir"),
+                ui.div(ui.h5("Compartir"),
                        ui.p("Ofrece a directores y docentes una misma fuente de información, siempre actualizada "
                             "y sin datos personales de los alumnos."), class_="pq-card"),
                 class_="pq-grid",
@@ -1149,20 +1134,20 @@ panel_presentacion = ui.nav_panel(
         _seccion(
             "¿Qué encontrarás en cada pestaña?",
             ui.div(
-                _tarjeta_seccion("🧭", "Inicio", "Hojas de ruta",
+                _tarjeta_seccion("Inicio", "Hojas de ruta",
                                  "Diagnóstico, objetivos, estrategias y metas 2027–2029 de internacionalización de "
                                  "Administración de Negocios y de Contabilidad, con el avance actual de los "
                                  "indicadores que el dashboard puede medir."),
-                _tarjeta_seccion("✈️", "Indicadores de Alumnos", "Movilidad saliente",
+                _tarjeta_seccion("Indicadores de Alumnos", "Movilidad saliente",
                                  "Estudiantes UCSP que realizaron intercambio: evolución por periodo, países y "
                                  "universidades de destino, modalidad y concepto."),
-                _tarjeta_seccion("🛬", "Indicadores de Alumnos", "Movilidad entrante",
+                _tarjeta_seccion("Indicadores de Alumnos", "Movilidad entrante",
                                  "Estudiantes de otras universidades que estudiaron en la UCSP: países, "
                                  "universidades de origen, carreras y convenios."),
-                _tarjeta_seccion("📚", "Indicadores de Alumnos", "Internacionalización de la Currícula",
+                _tarjeta_seccion("Indicadores de Alumnos", "Internacionalización de la Currícula",
                                  "% de alumnos que participaron en clases espejo, COIL o con profesores visitantes "
                                  "respecto de los matriculados, por periodo y escuela."),
-                _tarjeta_seccion("👩‍🏫", "Indicadores de Docentes", "Internacionalización de la Currícula",
+                _tarjeta_seccion("Indicadores de Docentes", "Internacionalización de la Currícula",
                                  "Actividades internacionales de los docentes: clases espejo, COIL, profesores "
                                  "visitantes, universidades socias y detalle de cada actividad."),
                 class_="sc-grid",
@@ -1174,12 +1159,12 @@ panel_presentacion = ui.nav_panel(
                 ui.div(ui.strong("Filtros"), ui.span(" — en el panel izquierdo de cada pestaña: periodo desde/hasta, "
                                                      "escuela, país, etc. Se aplican a todo lo que ves en esa pestaña."), class_="tip"),
                 ui.div(ui.strong("Gráficos"), ui.span(" — pasa el mouse sobre una barra o país para ver el valor exacto; "
-                                                      "con el ícono ⤢ se amplían a pantalla completa."), class_="tip"),
+                                                      "con el botón de ampliar (esquina inferior derecha) se ven a pantalla completa."), class_="tip"),
                 ui.div(ui.strong("Notas en gris"), ui.span(" — explican de dónde salen los datos y cómo se calcula "
                                                            "cada indicador."), class_="tip"),
                 ui.div(ui.strong("Descargar"), ui.span(" — las tablas de detalle se pueden filtrar y descargar en CSV."), class_="tip"),
                 ui.div(ui.strong("Actualizar"), ui.span(" — los datos se leen de las bases en Google Drive cada 10 minutos; "
-                                                        "el botón ↻ Actualizar datos fuerza la lectura."), class_="tip"),
+                                                        "el botón «Actualizar datos» fuerza la lectura."), class_="tip"),
                 class_="tips",
             ),
         ),
@@ -1230,14 +1215,13 @@ def panel_ruta(k):
                         ui.p(R["perfil_intro"]),
                         ui.p(ui.em(R["perfil_mision"])) if R["perfil_mision"] else None,
                         ui.p(ui.strong(R["perfil_lista_titulo"])),
-                        _ul(R["perfil_lista"], "◆", "lista-perfil"),
+                        _ul(R["perfil_lista"], "lista-perfil"),
                         class_="bloque",
                     ),
                     ui.div(
                         ui.h5("Perfil global UCSP"),
-                        *[ui.div(ui.div(ic, class_="pilar-ico"),
-                                 ui.div(ui.div(t, class_="pilar-t"), ui.div(sub, class_="pilar-s")), class_="pilar")
-                          for ic, t, sub in _PILARES_UCSP],
+                        *[ui.div(ui.div(t, class_="pilar-t"), ui.div(sub, class_="pilar-s"), class_="pilar")
+                          for t, sub in _PILARES_UCSP],
                         class_="bloque",
                     ),
                     col_widths=(8, 4),
@@ -1246,8 +1230,8 @@ def panel_ruta(k):
             _seccion(
                 "Diagnóstico de internacionalización",
                 ui.layout_columns(
-                    ui.div(ui.h5("✅ Fortalezas"), _ul(R["fortalezas"], "✓", "lista-ok"), class_="bloque bloque-ok"),
-                    ui.div(ui.h5("⚠️ Oportunidades de mejora"), _ul(R["oportunidades"], "▲", "lista-warn"),
+                    ui.div(ui.h5("Fortalezas"), _ul(R["fortalezas"], "lista-ok"), class_="bloque bloque-ok"),
+                    ui.div(ui.h5("Oportunidades de mejora"), _ul(R["oportunidades"], "lista-warn"),
                            class_="bloque bloque-warn"),
                     col_widths=(6, 6),
                 ),
@@ -1268,7 +1252,7 @@ def panel_ruta(k):
                     class_="filtros-ruta",
                 ),
                 ui.output_ui(f"hr_{pid}_estr"),
-                ui.p("ⓘ Las barras comparan las metas de 2027, 2028 y 2029 de cada estrategia. Donde dice "
+                ui.p("Las barras comparan las metas de 2027, 2028 y 2029 de cada estrategia. Donde dice "
                      "«Situación actual», el valor se calcula en vivo con los datos de este dashboard: movilidad "
                      "saliente (estudiantes de la escuela en el último año con datos), % de alumnos con experiencias "
                      "internacionales (último periodo de la currícula) y cursos con clase espejo, COIL o profesor "
@@ -1295,7 +1279,7 @@ app_ui = ui.page_navbar(
     ),
     panel_docentes,
     ui.nav_spacer(),
-    ui.nav_control(ui.input_action_button("recargar", "↻ Actualizar datos",
+    ui.nav_control(ui.input_action_button("recargar", "Actualizar datos",
                                           class_="btn-sm btn-light")),
     title="Internacionalización FCEE",
     window_title="Internacionalización FCEE",
@@ -1375,14 +1359,13 @@ app_ui = ui.page_navbar(
         .mini-lbl {{ font-size: .82rem; color:{T['tinta_2']}; }}
         .lista-ico {{ list-style: none; padding-left: 0; margin: 0; }}
         .lista-ico li {{ display:flex; gap:.6rem; margin-bottom: .55rem; line-height: 1.4; }}
-        .li-ico {{ flex: none; width: 1.2rem; text-align:center; color:{T['acento']}; font-weight: 700; }}
-        .lista-ok .li-ico {{ color:#2fbf71; }}
-        .lista-warn .li-ico {{ color:#e3a008; }}
+        .li-ico {{ flex: none; width: 7px; height: 7px; border-radius: 50%; margin-top: .5rem; background:{T['acento']}; }}
+        .lista-ok .li-ico {{ background:#2fbf71; }}
+        .lista-warn .li-ico {{ background:#e3a008; }}
         .bloque-ok {{ border-top: 3px solid #2fbf71; }}
         .bloque-warn {{ border-top: 3px solid #e3a008; }}
-        .pilar {{ display:flex; gap:.8rem; align-items:center; padding:.75rem; border-radius: 12px;
+        .pilar {{ display:flex; flex-direction:column; gap:.1rem; padding:.75rem; border-radius: 12px;
                   background:{T['nota_fondo']}; margin-bottom:.6rem; }}
-        .pilar-ico {{ font-size: 1.6rem; }}
         .pilar-t {{ font-weight: 650; color:{T['tinta']}; }}
         .pilar-s {{ font-size: .82rem; color:{T['tinta_2']}; }}
         .obj-card {{ display:flex; gap: .9rem; align-items:flex-start; }}
@@ -1569,30 +1552,6 @@ def server(input, output, session):
         return render.DataGrid(t, filters=True, width="100%", height="420px")
 
     # ============ INICIO ============
-    @render.text
-    def p_kpi_sal(): return f"{len(sal()):,}"
-    @render.text
-    def p_kpi_ent(): return f"{len(ent()):,}"
-    @render.text
-    def p_kpi_doc():
-        a = actividades_unicas(doc())
-        return f"{int(a['Tipo'].isin(TIPOS_INDICADOR).sum()):,}"
-
-    @reactive.calc
-    def p_cur_ultimo():
-        base, mat = cur()
-        r = resumen_curricula(base, mat)
-        r = r[r["Periodo"].str.match(r"^\d{4}-\d{2}$")]
-        req(not r.empty)
-        ult = r["Periodo"].max()
-        u = r[r["Periodo"] == ult]
-        return ult, u["Con actividad"].sum() / max(u["Matriculados"].sum(), 1)
-
-    @render.text
-    def p_kpi_cur(): return f"{p_cur_ultimo()[1]:.1%}"
-    @render.text
-    def p_kpi_cur_nota(): return f"Periodo {p_cur_ultimo()[0]}"
-
     def _num(v):
         return float(str(v).replace("%", "").strip())
 
@@ -1662,7 +1621,7 @@ def server(input, output, session):
                 if m:
                     valor, txt = m
                     pct = valor / nums[0] * 100 if nums[0] else 0
-                    estado = "✓ meta 2027 alcanzada" if pct >= 100 else f"{pct:.0f}% de la meta 2027"
+                    estado = "meta 2027 alcanzada" if pct >= 100 else f"{pct:.0f}% de la meta 2027"
                     avance = ui.div(ui.strong("Situación actual: "), txt, f" · {estado}",
                                     ui.div(ui.div(style=f"width:{min(pct, 100):.0f}%"), class_="avance-barra"),
                                     class_="avance")
@@ -1674,7 +1633,8 @@ def server(input, output, session):
                 ui.div(ui.strong("Indicador: "), indicador, class_="estr-ind"),
                 ui.div(*bloques_meta, class_="metas"),
                 avance,
-                ui.div(ui.span(f"👤 {resp}"), ui.span(f"📝 {obs}") if obs else None, class_="estr-pie"),
+                ui.div(ui.span(ui.strong("Responsable: "), resp),
+                       ui.span(ui.strong("Observaciones: "), obs) if obs else None, class_="estr-pie"),
                 class_="estr-card",
             ))
         if not tarjetas:
