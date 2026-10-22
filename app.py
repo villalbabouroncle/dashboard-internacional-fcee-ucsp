@@ -5,7 +5,7 @@ Shiny for Python  ·  ejecutar con:  shiny run app.py --reload
 
 Lee la base directamente desde Google Drive cada vez que se abre
 (y cada 10 minutos, o al pulsar "Actualizar datos").
-Los datos personales (nombres, apellidos, correos) se descartan al cargar.
+Los detalles por estudiante muestran nombres, correos y códigos (decisión de la Facultad para el seguimiento).
 """
 
 import io
@@ -331,13 +331,15 @@ def cargar_curricula(libro: pd.ExcelFile):
                       ["PERIODO", "ESCUELA_PROFESIONAL", "ID_ALUMNO", "CURSO", "GRUPO", "TIPO_ACTIVIDAD"])
     if b is None:
         return None, msg
-    # Por seguridad: si llegaran nombres o códigos, se descartan
-    b = b.drop(columns=[c for c in ["ALUMNO", "CODIGO_ACADEMICO"] if c in b.columns])
     b = b[b["PERIODO"].notna() & b["ID_ALUMNO"].notna()].copy()
     base = pd.DataFrame({
         "Periodo": b["PERIODO"].map(_periodo_num),
         "Escuela": b["ESCUELA_PROFESIONAL"].map(_escuela_nombre),
         "ID": b["ID_ALUMNO"].astype(str),
+        "Código": (b["CODIGO_ACADEMICO"] if "CODIGO_ACADEMICO" in b else pd.Series(index=b.index, dtype=object))
+                  .map(lambda v: _txt(v) or ""),
+        "Alumno": (b["ALUMNO"] if "ALUMNO" in b else pd.Series(index=b.index, dtype=object))
+                  .map(lambda v: _txt(v) or ""),
         "Curso": b["CURSO"].map(_categoria),
         "Grupo": b["GRUPO"].map(_categoria),
         "Profesor": (b["PROFESOR"] if "PROFESOR" in b else pd.Series(index=b.index, dtype=object)).map(_categoria),
@@ -417,7 +419,6 @@ def cargar_datos():
     # --- Saliente ---
     sal = hojas[HOJA_SALIENTE].copy()
     sal = sal.rename(columns={"Modalidad": "Duración", "Modalidad.1": "Formato"})
-    sal = sal.drop(columns=[c for c in ["Apellidos", "Nombres", "Correo"] if c in sal], errors="ignore")
     sal = sal.dropna(how="all")
     sal = _limpiar_texto(sal)
     sal["Periodo"] = sal["Per. Acad."].map(_normalizar_periodo)
@@ -427,7 +428,6 @@ def cargar_datos():
 
     # --- Entrante ---
     ent = hojas[HOJA_ENTRANTE].copy()
-    ent = ent.drop(columns=[c for c in ["Nombres", "Correos", "Correo"] if c in ent], errors="ignore")
     ent = ent.dropna(how="all")
     ent = _limpiar_texto(ent)
     ent["Periodo"] = ent["Periodo"].map(_normalizar_periodo)
@@ -1065,7 +1065,7 @@ panel_saliente = ui.nav_panel(
         ),
         fuente("archivo «Consolidado de Movilidad Estudiantil SALIENTE y ENTRANTE», pestaña MOVILIDAD SALIENTE. "
                "Cada fila de esa base es un estudiante UCSP que realizó una movilidad en un periodo académico. "
-               "No se usan nombres ni correos. Los filtros de la izquierda se aplican a todos los indicadores, "
+               "Al final está el detalle por estudiante (apellidos, nombres y correo). Los filtros de la izquierda se aplican a todos los indicadores, "
                "gráficos y tablas de esta pestaña."),
         ui.layout_column_wrap(
             kpi("Estudiantes UCSP en movilidad", "s_kpi_total",
@@ -1110,6 +1110,13 @@ panel_saliente = ui.nav_panel(
         tarjeta("Detalle por universidad de destino", ui.output_data_frame("s_tabla"),
                 "Una fila por universidad: número de movilidades, primer y último periodo con movilidad, y convenios "
                 "con los que se realizaron. Se puede filtrar escribiendo bajo cada columna."),
+        tarjeta(
+            ui.div(ui.span("Detalle por estudiante"),
+                   ui.download_button("s_descargar_est", "Descargar (CSV)", class_="btn-sm btn-outline-secondary ms-auto"),
+                   class_="d-flex align-items-center gap-2"),
+            ui.output_data_frame("s_tabla_est"),
+            "Una fila por movilidad, con los filtros aplicados. Se puede buscar escribiendo bajo cada columna y descargar en CSV.",
+        ),
     ),
 )
 
@@ -1131,7 +1138,7 @@ panel_entrante = ui.nav_panel(
         ),
         fuente("archivo «Consolidado de Movilidad Estudiantil SALIENTE y ENTRANTE», pestaña MOVILIDAD ENTRANTE. "
                "Cada fila es un estudiante de otra universidad que estudió en la UCSP en un periodo. "
-               "No se usan nombres ni correos. Los filtros de la izquierda se aplican a toda esta pestaña."),
+               "Al final está el detalle por estudiante (nombre y correo). Los filtros de la izquierda se aplican a toda esta pestaña."),
         ui.layout_column_wrap(
             kpi("Estudiantes visitantes", "e_kpi_total",
                 "Número de estudiantes visitantes registrados en los periodos elegidos."),
@@ -1171,6 +1178,13 @@ panel_entrante = ui.nav_panel(
         tarjeta("Detalle por universidad de origen", ui.output_data_frame("e_tabla"),
                 "Una fila por universidad: número de estudiantes, primer y último periodo, y carreras en las que "
                 "estudiaron. Se puede filtrar escribiendo bajo cada columna."),
+        tarjeta(
+            ui.div(ui.span("Detalle por estudiante"),
+                   ui.download_button("e_descargar_est", "Descargar (CSV)", class_="btn-sm btn-outline-secondary ms-auto"),
+                   class_="d-flex align-items-center gap-2"),
+            ui.output_data_frame("e_tabla_est"),
+            "Una fila por estudiante visitante en cada periodo, con los filtros aplicados. Se puede buscar escribiendo bajo cada columna y descargar en CSV.",
+        ),
     ),
 )
 
@@ -1305,7 +1319,7 @@ panel_curr_alumnos = ui.nav_panel(
         fuente("archivo «CONSULTA_INDICADOR_INTERNACIONALIZACION_CURRICULA». BASE_GENERAL: una fila por alumno, "
                "curso y grupo en cada periodo; el tipo de actividad de cada curso-grupo viene de la base docente "
                "(Consoli). MATRICULADOS: alumnos matriculados por escuela y periodo según el Portal de Transparencia "
-               "UCSP. Los alumnos se identifican con un número anónimo; no se usan nombres ni códigos."),
+               "UCSP. Al final está el detalle por alumno, con su código y nombre."),
         ui.layout_column_wrap(
             kpi("% de alumnos con actividad internacional", "c_kpi_pct",
                 "Alumnos con actividad ÷ alumnos matriculados (tarjetas de la derecha).", "c_kpi_pct_nota"),
@@ -1361,7 +1375,14 @@ panel_curr_alumnos = ui.nav_panel(
                    class_="d-flex align-items-center gap-2"),
             ui.output_data_frame("c_tabla_grupo"),
             "Una fila por periodo, escuela, curso, grupo y tipo de actividad, con el número de alumnos de esa escuela "
-            "en ese grupo. No se muestra el listado de alumnos (datos personales).",
+            "en ese grupo. El listado de alumnos está en «Detalle por alumno».",
+        ),
+        tarjeta(
+            ui.div(ui.span("Detalle por alumno"),
+                   ui.download_button("c_descargar_alu", "Descargar (CSV)", class_="btn-sm btn-outline-secondary ms-auto"),
+                   class_="d-flex align-items-center gap-2"),
+            ui.output_data_frame("c_tabla_alu"),
+            "Una fila por alumno con actividad internacional (de los tipos marcados) en los periodos elegidos: periodos, número de cursos-grupo con actividad, tipos y cursos. Se puede buscar escribiendo bajo cada columna y descargar en CSV.",
         ),
     ),
 )
@@ -1380,8 +1401,8 @@ panel_companygame = ui.nav_panel(
         ),
         fuente("base «CompanyGame_base_unificada», armada con los informes oficiales del Torneo ACBSP–CompanyGame "
                "(PDF de competencias 2024 y 2025, Informe Final 2024) y los archivos de seguimiento Torneo 2022, "
-               "2023, 2024 y 2025. Los estudiantes se identifican con un código anónimo; no se usan nombres ni "
-               "correos. La UCSP participa como Facultad de Ciencias Económicas y Empresariales, con estudiantes de "
+               "2023, 2024 y 2025. El detalle de la edición incluye el listado de estudiantes con nombre, correo y "
+               "código (este último solo existe en 2024). La UCSP participa como Facultad de Ciencias Económicas y Empresariales, con estudiantes de "
                "Administración de Negocios y Contabilidad. Las categorías del torneo (Administración, Finanzas y "
                "Contabilidad, Marketing) son áreas de competencia, no carreras: un estudiante de cualquier carrera "
                "puede competir en cualquier categoría."),
@@ -1459,6 +1480,13 @@ panel_companygame = ui.nav_panel(
             "Una fila por equipo UCSP de la edición: integrantes, hitos y puestos en el simulador. Se puede filtrar "
             "escribiendo bajo cada columna y descargar en CSV.",
         ),
+        tarjeta(
+            ui.div(ui.span("Estudiantes de la edición"),
+                   ui.download_button("cg_descargar_est", "Descargar (CSV)", class_="btn-sm btn-outline-secondary ms-auto"),
+                   class_="d-flex align-items-center gap-2"),
+            ui.output_data_frame("cg_t_est"),
+            "Estudiantes de los equipos inscritos en la edición elegida. El código de alumno solo figura en el archivo de 2024. Se puede buscar escribiendo bajo cada columna y descargar en CSV.",
+        ),
     ),
 )
 
@@ -1519,7 +1547,7 @@ panel_presentacion = ui.nav_panel(
                             "o tipo de actividad, y descargar el detalle."), class_="pq-card"),
                 ui.div(ui.h5("Compartir"),
                        ui.p("Ofrece a directores y docentes una misma fuente de información, siempre actualizada "
-                            "y sin datos personales de los alumnos."), class_="pq-card"),
+                            "y con el detalle por estudiante para hacer seguimiento."), class_="pq-card"),
                 class_="pq-grid",
             ),
         ),
@@ -1684,6 +1712,7 @@ app_ui = ui.page_navbar(
     header=ui.TagList(
         ui.output_ui("aviso"),
         ui.head_content(
+            ui.tags.meta(name="robots", content="noindex, nofollow"),
             ui.tags.script(src="plotlyjs/plotly.min.js"),
             ui.tags.script(f"document.documentElement.setAttribute('data-bs-theme', '{T['modo']}');"),
         ),
@@ -1797,7 +1826,7 @@ app_ui = ui.page_navbar(
                      border-top: 1px solid {T['grilla']}; padding-top: .5rem; margin-top:auto; }}
         .leyenda-suelta {{ font-size: .78rem; color:{T['nota_texto']}; background:{T['nota_fondo']}; border-radius: 10px;
                            padding: .55rem .8rem; margin-top: 1rem; }}
-        #d_detalle td, #c_tabla_grupo td, #c_tabla_per td, #cg_t_eq td, #cg_t_cat td {{ white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }}
+        #d_detalle td, #c_tabla_grupo td, #c_tabla_per td, #cg_t_eq td, #cg_t_cat td, #s_tabla_est td, #e_tabla_est td, #c_tabla_alu td, #cg_t_est td {{ white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }}
     """)),
 )
 
@@ -1965,6 +1994,70 @@ def server(input, output, session):
                     Convenio=("Convenio", lambda s: ", ".join(sorted(s.dropna().unique()))))
                .reset_index().sort_values("Estudiantes", ascending=False))
         return render.DataGrid(t, filters=True, width="100%", height="420px")
+
+    # ----- Detalles por estudiante -----
+    def _cols(df, cols):
+        return df[[c for c in cols if c in df.columns]].copy()
+
+    def _s_est():
+        d = s_f()
+        cols = ["Periodo", "Apellidos", "Nombres", "Correo", "Esc. Prof. UCSP", "Estado", "Concepto", "Duración",
+                "Formato", "Universidad de destino", "País", "Convenio", "Beca"]
+        t = _cols(d, cols).rename(columns={"Esc. Prof. UCSP": "Programa profesional"})
+        orden = [c for c in ["Periodo", "Apellidos", "Nombres"] if c in t.columns]
+        return t.sort_values(orden, ascending=[False] + [True] * (len(orden) - 1), kind="stable").fillna("")
+
+    @render.data_frame
+    def s_tabla_est():
+        return render.DataGrid(_s_est(), filters=True, width="100%", height="460px")
+
+    @render.download(filename=lambda: f"movilidad_saliente_estudiantes_{datetime.now():%Y%m%d}.csv")
+    def s_descargar_est():
+        yield _s_est().to_csv(index=False, sep=";").encode("utf-8-sig")
+
+    def _e_est():
+        d = e_f()
+        cols = ["Periodo", "Nombres", "Correos", "Carrera", "Universidad de Origen", "País", "Convenio"]
+        t = _cols(d, cols).rename(columns={"Correos": "Correo", "Carrera": "Carrera en la UCSP"})
+        orden = [c for c in ["Periodo", "Nombres"] if c in t.columns]
+        return t.sort_values(orden, ascending=[False] + [True] * (len(orden) - 1), kind="stable").fillna("")
+
+    @render.data_frame
+    def e_tabla_est():
+        return render.DataGrid(_e_est(), filters=True, width="100%", height="460px")
+
+    @render.download(filename=lambda: f"movilidad_entrante_estudiantes_{datetime.now():%Y%m%d}.csv")
+    def e_descargar_est():
+        yield _e_est().to_csv(index=False, sep=";").encode("utf-8-sig")
+
+    def _c_alumnos():
+        a = _act_filtrada()
+        cols = ["Código", "Alumno", "Programa profesional", "Periodos", "Cursos-grupo con actividad",
+                "Tipos de actividad", "Cursos"]
+        if a.empty:
+            return pd.DataFrame(columns=cols)
+        tipos = list(input.c_tipo()) or TIPOS_CURRICULA
+        def unir(sr):
+            return ", ".join(sorted(set(x for x in sr if x)))
+        g = a.groupby("ID")
+        t = pd.DataFrame({
+            "Código": g["Código"].first(),
+            "Alumno": g["Alumno"].first(),
+            "Programa profesional": g["Escuela"].agg(unir),
+            "Periodos": g["Periodo"].agg(lambda sr: ", ".join(sorted(set(sr)))),
+            "Cursos-grupo con actividad": g.apply(lambda x: x[["Periodo", "Curso", "Grupo"]].drop_duplicates().shape[0]),
+            "Tipos de actividad": g.apply(lambda x: ", ".join(k for k in tipos if x[k].any())),
+            "Cursos": g["Curso"].agg(unir),
+        }).reset_index(drop=True)
+        return t.sort_values(["Programa profesional", "Alumno"], kind="stable")
+
+    @render.data_frame
+    def c_tabla_alu():
+        return render.DataGrid(_c_alumnos(), filters=True, width="100%", height="460px")
+
+    @render.download(filename=lambda: f"curricula_alumnos_detalle_{datetime.now():%Y%m%d}.csv")
+    def c_descargar_alu():
+        yield _c_alumnos().to_csv(index=False, sep=";").encode("utf-8-sig")
 
     # ============ INICIO ============
     def _num(v):
@@ -2763,6 +2856,24 @@ def server(input, output, session):
     @render.download(filename=lambda: f"companygame_equipos_{input.cg_ed()}.csv")
     def cg_descargar():
         yield _cg_tabla_eq().to_csv(index=False, sep=";").encode("utf-8-sig")
+
+    def _cg_est_tabla():
+        p = cg()["PARTICIPANTES"]
+        p = p[(p["Año"] == cg_anio()) & p["Categoría"].isin(cg_cats())]
+        cols = {"Nombre": "Nombre", "Correo": "Correo", "Código de alumno": "Código", "Programa / carrera": "Carrera",
+                "Categoría": "Categoría", "Curso": "Curso", "Equipo": "Equipo",
+                "Repite (ya participó antes)": "Ya participó antes"}
+        t = p[[c for c in cols if c in p.columns]].rename(columns=cols).fillna("")
+        return t.sort_values(["Categoría", "Equipo", "Nombre"] if "Nombre" in t.columns else ["Categoría", "Equipo"],
+                             kind="stable")
+
+    @render.data_frame
+    def cg_t_est():
+        return render.DataGrid(_cg_est_tabla(), filters=True, width="100%", height="460px")
+
+    @render.download(filename=lambda: f"companygame_estudiantes_{input.cg_ed()}.csv")
+    def cg_descargar_est():
+        yield _cg_est_tabla().to_csv(index=False, sep=";").encode("utf-8-sig")
 
     # ============ ENTRANTE ============
     @reactive.calc
