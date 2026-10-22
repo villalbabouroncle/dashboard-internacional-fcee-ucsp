@@ -37,6 +37,12 @@ TIPOS_CURRICULA = ["Clase Espejo", "Profesor Visitante", "COIL"]
 ESCUELAS = {"ADM": "Administración de Negocios", "CONT": "Contabilidad"}
 TIPOS_INDICADOR = ["Clase Espejo", "COIL", "Profesor Visitante"]
 TIPOS_PRINCIPALES = TIPOS_INDICADOR + ["Actividad Internacional", "Postulación"]
+# Docentes de la Facultad (denominador del % de docentes participantes).
+# Por ahora solo se tiene el dato de 2026-02 y se usa para todos los periodos.
+# Cuando se tengan otros periodos, agrégalos aquí con la misma estructura.
+DOCENTES_FACULTAD = {
+    "2026-02": {"Administración de Negocios": 87, "Contabilidad": 57, "Facultad": 105},
+}
 
 # Descarga todo el libro como .xlsx (respeta los tipos de cada celda)
 URL_XLSX = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
@@ -1203,10 +1209,15 @@ panel_curricula = ui.nav_panel(
                 "Actividad internacional, postulación, congresos, etc. No entran al indicador."),
             kpi("Docentes UCSP participantes", "d_kpi_doc",
                 "Docentes UCSP distintos con al menos una actividad."),
+            kpi("% de docentes de la Facultad que participan", "d_kpi_doc_pct",
+                "Docentes UCSP participantes ÷ docentes de la Facultad. Por ahora se usa el total de 2026-02 "
+                "(Administración de Negocios 87, Contabilidad 57; 105 en la Facultad, sin contar dos veces a quien "
+                "enseña en ambas carreras) para todos los periodos, hasta tener el dato de los demás.",
+                "d_kpi_doc_pct_nota"),
             kpi("Universidades socias", "d_kpi_uni", "Universidades contraparte distintas."),
             kpi("Alumnos participantes", "d_kpi_alu",
                 "Suma de N° alumnos ADM + CONT de cada actividad (una vez por actividad)."),
-            width=1 / 4, fill=False,
+            width=1 / 3, fill=False,
         ),
         ui.div(
             ui.strong("¿Cómo se cuentan las actividades? "),
@@ -1410,8 +1421,8 @@ panel_companygame = ui.nav_panel(
                 "Estudiantes distintos de los equipos inscritos oficialmente en cada edición (en 2025 no se cuentan "
                 "los grupos que no se inscribieron o no confirmaron). La categoría del torneo no es la carrera: "
                 "estudiantes de Administración de Negocios y de Contabilidad pueden competir en cualquier "
-                "categoría. La carrera es la que figura en cada archivo; en 2024 y 2025 los archivos registran a "
-                "todos como Administración de Negocios. 2024 corresponde al seguimiento interno (Torneo 2024.xlsx)."),
+                "categoría. La carrera es la que figura en cada archivo (2025 revisado por la Facultad; en 2024 no hubo "
+                "estudiantes de Contabilidad). 2024 corresponde al seguimiento interno (Torneo 2024.xlsx)."),
             col_widths=(6, 6),
         ),
         ui.layout_columns(
@@ -2283,6 +2294,27 @@ def server(input, output, session):
     def d_kpi_doc():
         p = d_act()["Profesor UCSP"]
         return str(p[~p.isin(["Sin información", "No aplica"])].nunique())
+    def _doc_pct():
+        p = d_act()["Profesor UCSP"]
+        n = p[~p.isin(["Sin información", "No aplica"])].nunique()
+        ref = max(DOCENTES_FACULTAD)                        # periodo con dato (hoy 2026-02)
+        tot = DOCENTES_FACULTAD[ref]
+        car = list(input.d_car())
+        if len(car) == 1 and car[0] in tot:
+            return n, tot[car[0]], ref, car[0]
+        return n, tot["Facultad"], ref, "Facultad"
+
+    @render.text
+    def d_kpi_doc_pct():
+        n, den, _r, _c = _doc_pct()
+        return f"{n / den:.0%}" if den else "–"
+
+    @render.text
+    def d_kpi_doc_pct_nota():
+        n, den, ref, quien = _doc_pct()
+        base = "de la Facultad" if quien == "Facultad" else f"de {quien}"
+        return f"{n} de {den} docentes {base} (total de {ref})"
+
     @render.text
     def d_kpi_uni():
         u = d_act()["Universidad"]
