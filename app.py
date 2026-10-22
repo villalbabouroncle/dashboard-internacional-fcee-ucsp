@@ -666,16 +666,25 @@ def cg_posiciones(cat: pd.DataFrame, cats):
     return fig
 
 
-def cg_estudiantes(part: pd.DataFrame, cats):
+COLOR_CARRERA = {"Administración de Negocios": PALETA[6], "Contabilidad": PALETA[3]}
+
+
+def cg_estudiantes(part: pd.DataFrame, cats, por="Categoría"):
     d = part[part["Categoría"].isin(cats)]
     if d.empty:
         return _vacio()
-    t = pd.crosstab(d["Año"], d["Categoría"])
+    t = pd.crosstab(d["Año"], d[por])
+    if por == "Categoría":
+        orden, colores, sufijo = CG_CATS, COLOR_CAT, "categoría "
+    else:
+        orden = list(COLOR_CARRERA) + sorted(k for k in t.columns if k not in COLOR_CARRERA)
+        colores, sufijo = COLOR_CARRERA, "carrera "
     fig = go.Figure()
-    for c in [k for k in CG_CATS if k in t.columns]:
+    for i, c in enumerate([k for k in orden if k in t.columns]):
         fig.add_bar(x=t.index.astype(str), y=t[c], name=c,
-                    marker=dict(color=COLOR_CAT[c], line=dict(color=T["superficie"], width=1)),
-                    hovertemplate=f"<b>%{{x}}</b><br>{c}: %{{y}} estudiantes<extra></extra>")
+                    marker=dict(color=colores.get(c, PALETA[(i + 4) % len(PALETA)]),
+                                line=dict(color=T["superficie"], width=1)),
+                    hovertemplate=f"<b>%{{x}}</b><br>{sufijo}{c}: %{{y}} estudiantes<extra></extra>")
     tot = t.sum(axis=1)
     fig.add_scatter(x=tot.index.astype(str), y=tot.values, mode="text", text=tot.values, textposition="top center",
                     textfont=dict(color=TINTA), showlegend=False, hoverinfo="skip")
@@ -1360,8 +1369,10 @@ panel_companygame = ui.nav_panel(
         fuente("base «CompanyGame_base_unificada», armada con los informes oficiales del Torneo ACBSP–CompanyGame "
                "(PDF de competencias 2024 y 2025, Informe Final 2024) y los archivos de seguimiento Torneo 2022, "
                "2023, 2024 y 2025. Los estudiantes se identifican con un código anónimo; no se usan nombres ni "
-               "correos. Categorías del torneo: Administración (curso Plan de Negocios), Finanzas y Contabilidad "
-               "(Mercados Financieros / Finanzas Corporativas II) y Marketing."),
+               "correos. La UCSP participa como Facultad de Ciencias Económicas y Empresariales, con estudiantes de "
+               "Administración de Negocios y Contabilidad. Las categorías del torneo (Administración, Finanzas y "
+               "Contabilidad, Marketing) son áreas de competencia, no carreras: un estudiante de cualquier carrera "
+               "puede competir en cualquier categoría."),
         ui.h5("Evolución edición a edición", class_="sec-titulo mt-1 mb-3"),
         ui.layout_column_wrap(
             kpi("Ediciones con participación UCSP", "cg_k_ed", "Ediciones del torneo con equipos UCSP inscritos.",
@@ -1389,9 +1400,18 @@ panel_companygame = ui.nav_panel(
                     "Posición de la UCSP en el ranking indexado de cada categoría (1 = primer lugar; el eje está "
                     "invertido, así que subir es mejorar). Pasa el mouse para ver cuántas instituciones competían. "
                     "2022 no tiene posición publicada."),
-            tarjeta("Estudiantes UCSP por edición y categoría", ui.output_ui("cg_g_est"),
-                    "Estudiantes distintos en los listados de cada edición. 2024 corresponde al seguimiento "
-                    "interno (Torneo 2024.xlsx)."),
+            tarjeta(
+                ui.div(ui.span("Estudiantes UCSP por edición"),
+                       ui.div(ui.input_select("cg_est_por", None, width="210px", choices={
+                           "Programa / carrera": "por carrera", "Categoría": "por categoría del torneo"}),
+                              class_="ms-auto"),
+                       class_="d-flex align-items-center gap-2"),
+                ui.output_ui("cg_g_est"),
+                "Estudiantes distintos de los equipos inscritos oficialmente en cada edición (en 2025 no se cuentan "
+                "los grupos que no se inscribieron o no confirmaron). La categoría del torneo no es la carrera: "
+                "estudiantes de Administración de Negocios y de Contabilidad pueden competir en cualquier "
+                "categoría. La carrera es la que figura en cada archivo; en 2024 y 2025 los archivos registran a "
+                "todos como Administración de Negocios. 2024 corresponde al seguimiento interno (Torneo 2024.xlsx)."),
             col_widths=(6, 6),
         ),
         ui.layout_columns(
@@ -2485,7 +2505,7 @@ def server(input, output, session):
 
     @render.ui
     def cg_g_est():
-        return _html(cg_estudiantes(cg()["PARTICIPANTES"], cg_cats()))
+        return _html(cg_estudiantes(cg()["PARTICIPANTES"], cg_cats(), input.cg_est_por() or "Programa / carrera"))
 
     @render.ui
     def cg_g_hitos():
@@ -2551,8 +2571,10 @@ def server(input, output, session):
         p = cg()["PARTICIPANTES"]
         p = p[(p["Año"] == a) & p["Categoría"].isin(cg_cats())]
         rep = int((p["Repite (ya participó antes)"] == "Sí").sum())
+        car = p["Programa / carrera"].value_counts()
+        txt = " · ".join(f"{'Adm. de Negocios' if k == 'Administración de Negocios' else k}: {v}" for k, v in car.items())
         extra = " · listado del seguimiento interno" if a == 2024 else ""
-        return f"{rep} ya habían participado antes{extra}"
+        return f"{txt} · {rep} ya habían participado antes{extra}"
 
     def _cg_informe(a):
         """(entregaron, equipos, fuente) del informe final."""
