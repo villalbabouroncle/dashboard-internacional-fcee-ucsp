@@ -825,6 +825,231 @@ def cg_competencias_detalle(comp: pd.DataFrame):
     return fig
 
 
+# ─────────────────────────────────────────────────────────────
+# ENCUESTAS DE SATISFACCIÓN (internacionalización de la currícula)
+# Una hoja de Google por periodo, compartida como "Cualquier persona con el enlace → Lector".
+# Para agregar un periodo nuevo, añade una línea: "AAAA-SS": "ID de la hoja".
+# ─────────────────────────────────────────────────────────────
+ENCUESTAS_SATISFACCION = {
+    "2026-01": "1ylMidkIzk3KhwI_hek8XEvs7SIDUQ8t6PvPnrNJgg9Y",
+}
+# (texto que identifica la columna, etiqueta corta, dimensión)
+ENC_ITEMS = [
+    ("cumplio con mis expectativas", "Cumplió mis expectativas", "Aprendizaje"),
+    ("objetivos de la clase", "Los objetivos fueron claros", "Aprendizaje"),
+    ("contenidos desarrollados", "Contenidos relevantes para mi formación", "Aprendizaje"),
+    ("metodologia utilizada", "La metodología facilitó mi aprendizaje", "Aprendizaje"),
+    ("interaccion con estudiantes", "La interacción con otra universidad me enriqueció", "Impacto intercultural"),
+    ("diferentes perspectivas", "Conocí otras perspectivas académicas o culturales", "Impacto intercultural"),
+    ("comodo", "Me sentí cómodo(a) en un entorno internacional/virtual", "Impacto intercultural"),
+    ("incremento mi interes", "Aumentó mi interés en actividades internacionales", "Impacto intercultural"),
+    ("organizacion de la actividad", "La organización fue adecuada", "Logística y soporte"),
+    ("plataforma tecnologica", "La plataforma funcionó correctamente", "Logística y soporte"),
+    ("duracion de la sesion", "La duración fue apropiada", "Logística y soporte"),
+    ("explico los temas", "El/la docente explicó con claridad", "Rol docente"),
+    ("participacion activa", "Se promovió la participación activa", "Rol docente"),
+    ("espacio para preguntas", "Hubo espacio para preguntas e interacción", "Rol docente"),
+]
+ENC_DIMENSIONES = ["Aprendizaje", "Impacto intercultural", "Logística y soporte", "Rol docente"]
+ENC_LABELS = [e[1] for e in ENC_ITEMS]
+ENC_CALIF = ["Deficiente", "Regular", "Buena", "Muy Buena", "Excelente"]
+ENC_RECOM = ["Sí", "Tal vez", "No"]
+
+
+def _clave(t) -> str:
+    return re.sub(r"\s+", " ", _sin_tildes(str(t)).lower()).strip()
+
+
+def cargar_encuestas():
+    """Une las encuestas de todos los periodos. Devuelve (datos, avisos)."""
+    partes, avisos = [], []
+    for periodo, sid in sorted(ENCUESTAS_SATISFACCION.items()):
+        try:
+            contenido, _f = _descargar_libro(sid, Path(__file__).parent / "data" / f"encuesta_{periodo}.xlsx")
+            d = pd.read_excel(io.BytesIO(contenido), sheet_name=0)
+        except Exception as e:
+            avisos.append(f"No se pudo leer la encuesta {periodo}: {e}")
+            continue
+        cols = {_clave(c): c for c in d.columns}
+
+        def buscar(frag):
+            f = _clave(frag)
+            return next((orig for k, orig in cols.items() if f in k), None)
+
+        base = {"Fecha": buscar("marca temporal"), "Correo": buscar("correo"), "Programa": buscar("programa"),
+                "Curso": buscar("curso"), "Semestre": buscar("semestre"),
+                "Calificación": buscar("calificarias"), "Recomienda": buscar("recomendarias"),
+                "Aspectos a mejorar": buscar("podrian mejorarse"), "Comentarios": buscar("comentarios")}
+        faltan = [k for k in ("Curso", "Calificación") if base[k] is None]
+        if faltan:
+            avisos.append(f"En la encuesta {periodo} no encuentro las columnas: {', '.join(faltan)}.")
+            continue
+        out = pd.DataFrame({k: (d[v] if v is not None else pd.Series([None] * len(d))) for k, v in base.items()})
+        for frag, etiqueta, _dim in ENC_ITEMS:
+            c = buscar(frag)
+            out[etiqueta] = pd.to_numeric(d[c], errors="coerce") if c is not None else float("nan")
+        out["Periodo"] = periodo
+        partes.append(out)
+    if not partes:
+        return None, avisos, 0
+    e = pd.concat(partes, ignore_index=True)
+    e = e[e["Curso"].notna()].copy()
+    for c in ["Correo", "Programa", "Curso", "Calificación", "Recomienda", "Aspectos a mejorar", "Comentarios"]:
+        e[c] = e[c].map(lambda v: re.sub(r"\s+", " ", str(v)).strip() if pd.notna(v) else "")
+    e["Correo"] = e["Correo"].str.lower()
+    e["Programa"] = e["Programa"].replace("", "Sin información")
+    e["Semestre"] = pd.to_numeric(e["Semestre"], errors="coerce").map(lambda v: "" if pd.isna(v) else str(int(v)))
+    e["Fecha"] = pd.to_datetime(e["Fecha"], dayfirst=True, errors="coerce")
+    canon_cal = {_clave(c): c for c in ENC_CALIF}
+    e["Calificación"] = e["Calificación"].map(lambda v: canon_cal.get(_clave(v), v))
+    e["Calificación (1-5)"] = e["Calificación"].map({c: i for i, c in enumerate(ENC_CALIF, 1)})
+    canon_rec = {"si": "Sí", "tal vez": "Tal vez", "no": "No"}
+    e["Recomienda"] = e["Recomienda"].map(lambda v: canon_rec.get(_clave(v), v))
+    # Una respuesta por estudiante y curso en cada periodo: se conserva la última enviada
+    antes = len(e)
+    e["_k"] = e["Correo"].where(e["Correo"] != "", e.index.astype(str))
+    e = e.sort_values("Fecha", kind="stable").drop_duplicates(["Periodo", "_k", "Curso"], keep="last")
+    e = e.drop(columns="_k").sort_index()
+    e["Promedio afirmaciones"] = e[ENC_LABELS].mean(axis=1)
+    return e.reset_index(drop=True), avisos, antes - len(e)
+
+
+def _color_likert(n: int) -> str:
+    return {1: ROJO_NO, 2: _mezcla(T["superficie"], ROJO_NO, 0.6),
+            3: _mezcla(T["superficie"], T["tinta_2"], 0.45),
+            4: _mezcla(T["superficie"], VERDE_OK, 0.42), 5: VERDE_OK}[n]
+
+
+def enc_calificacion(e: pd.DataFrame):
+    if e.empty:
+        return _vacio()
+    c = e["Calificación"].value_counts().reindex(ENC_CALIF, fill_value=0)
+    tot = c.sum()
+    fig = go.Figure(go.Bar(
+        x=[f"{k}<br>({i})" for i, k in enumerate(ENC_CALIF, 1)], y=c.values,
+        marker=dict(color=[_color_likert(i) for i in range(1, 6)], cornerradius=4),
+        text=[f"{v} ({v / tot:.0%})" if tot else "" for v in c.values], textposition="outside", cliponaxis=False,
+        textfont=dict(color=TINTA_2), customdata=list(ENC_CALIF),
+        hovertemplate="<b>%{customdata}</b><br>%{y} estudiantes<extra></extra>"))
+    fig = _base(fig, 330)
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(title_text="N.º de estudiantes", range=[0, c.max() * 1.18 if tot else 1])
+    return fig
+
+
+def enc_recomendacion(e: pd.DataFrame):
+    c = e["Recomienda"].value_counts().reindex(ENC_RECOM, fill_value=0)
+    if c.sum() == 0:
+        return _vacio()
+    fig = go.Figure(go.Pie(
+        labels=c.index, values=c.values, hole=0.55, sort=False, direction="clockwise",
+        marker=dict(colors=[VERDE_OK, "#e3a008", ROJO_NO], line=dict(color=T["superficie"], width=2)),
+        textinfo="label+percent", textfont=dict(size=13),
+        hovertemplate="<b>%{label}</b><br>%{value} estudiantes (%{percent})<extra></extra>"))
+    fig = _base(fig, 330)
+    fig.update_layout(showlegend=False, margin=dict(t=10, b=10, l=10, r=10))
+    return fig
+
+
+def enc_likert(e: pd.DataFrame, dim: str | None):
+    items = [x for x in ENC_ITEMS if not dim or x[2] == dim]
+    if e.empty:
+        return _vacio()
+    filas = []
+    for _f, lab, d in items:
+        v = e[lab].dropna()
+        n = len(v)
+        filas.append((lab, d, n, [(v == k).sum() for k in range(1, 6)], v.mean() if n else None))
+    filas = filas[::-1]                         # el primero arriba
+    ys = [f[0] for f in filas]
+    fig = go.Figure()
+    for k in range(1, 6):
+        fig.add_bar(y=ys, x=[f[3][k - 1] / f[2] if f[2] else 0 for f in filas], orientation="h", name=str(k),
+                    marker=dict(color=_color_likert(k), line=dict(color=T["superficie"], width=1)),
+                    customdata=[[f[3][k - 1], f[1]] for f in filas],
+                    hovertemplate=f"<b>%{{y}}</b><br>%{{customdata[1]}}<br>Respuesta {k}: %{{x:.0%}} "
+                                  f"(%{{customdata[0]}} estudiantes)<extra></extra>")
+    fig.add_scatter(y=ys, x=[1.06] * len(ys), mode="text", text=[f"{f[4]:.2f}" if f[4] else "" for f in filas],
+                    textfont=dict(color=TINTA, size=12), showlegend=False, hoverinfo="skip")
+    fig = _base(fig, max(260, 34 * len(ys) + 90))
+    fig.update_layout(barmode="stack", bargap=0.3, margin=dict(r=60),
+                      legend=dict(title_text="Respuesta (1 = muy en desacuerdo, 5 = muy de acuerdo)  ",
+                                  orientation="h", y=1.02, yanchor="bottom", x=0))
+    fig.update_xaxes(tickformat=".0%", range=[0, 1.1], tickvals=[0, 0.25, 0.5, 0.75, 1], showgrid=False)
+    fig.update_yaxes(showgrid=False, automargin=True)
+    fig.add_annotation(x=1.06, y=1, yref="paper", yanchor="bottom", text="Prom.", showarrow=False,
+                       font=dict(color=TINTA_2, size=11))
+    return fig
+
+
+def enc_dimensiones(e: pd.DataFrame):
+    if e.empty:
+        return _vacio()
+    prom = [e[[x[1] for x in ENC_ITEMS if x[2] == d]].stack().mean() for d in ENC_DIMENSIONES]
+    fig = go.Figure(go.Bar(
+        x=ENC_DIMENSIONES, y=prom, marker=dict(color=PALETA[:4], cornerradius=4),
+        text=[f"{p:.2f}" for p in prom], textposition="outside", cliponaxis=False, textfont=dict(color=TINTA),
+        hovertemplate="<b>%{x}</b><br>Promedio: %{y:.2f} de 5<extra></extra>"))
+    fig = _base(fig, 330)
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(range=[0, 5.4], title_text="Promedio (1 a 5)")
+    return fig
+
+
+def enc_cursos(t: pd.DataFrame):
+    if t.empty:
+        return _vacio()
+    d = t.sort_values("Promedio afirmaciones")
+    colores = {"Clase Espejo": PALETA[0], "COIL": PALETA[1], "Profesor Visitante": PALETA[2]}
+    fig = go.Figure()
+    vistos = set()
+    for _, r in d.iterrows():
+        tipo = r["Tipo de actividad"]
+        fig.add_bar(y=[r["Curso"]], x=[r["Promedio afirmaciones"]], orientation="h", name=tipo,
+                    legendgroup=tipo, showlegend=tipo not in vistos,
+                    marker=dict(color=colores.get(tipo, PALETA[5]), cornerradius=4),
+                    text=f"{r['Promedio afirmaciones']:.2f}  (n={r['Encuestas']})", textposition="outside",
+                    cliponaxis=False, textfont=dict(color=TINTA_2),
+                    hovertemplate=f"<b>{r['Curso']}</b><br>{tipo} · {r['Periodo']}<br>Promedio: %{{x:.2f}} de 5"
+                                  f"<br>Calificación general: {r['Calificación general']:.2f}<br>"
+                                  f"{r['Encuestas']} encuestas<extra></extra>")
+        vistos.add(tipo)
+    fig = _base(fig, max(260, 30 * len(d) + 80))
+    fig.update_layout(barmode="overlay", margin=dict(r=90))
+    fig.update_xaxes(range=[0, 5], showgrid=False, title_text="Promedio de las 14 afirmaciones (1 a 5)")
+    fig.update_yaxes(showgrid=False, automargin=True)
+    return fig
+
+
+_STOP = set("""a al algo algun alguna algunas algunos ante antes asi aun bien cada como con contra cual cuando de del
+desde donde dos el ella ellas ello ellos en entre era es esa esas ese eso esos esta estaba estan estar este esto estos
+fue fueron ha hay hubo la las le les lo los mas me mi mis mucho muy nada ni no nos nuestra nuestro o otra otro para
+pero poco por porque puede que se sea sean ser si sin sobre solo su sus tal tambien tan te tener tiene todo todos
+tu un una unas uno unos y ya yo mas menos hace hacer haya creo seria podria cosa cosas vez etc ninguno ninguna nada
+todo bien ok ademas asimismo ser sido estaba estuvo fue""".split())
+
+
+def enc_palabras(textos: pd.Series, top=20):
+    from collections import Counter
+    cnt, formas = Counter(), {}
+    for t in textos.dropna():
+        for w in re.findall(r"[a-záéíóúñü]+", str(t).lower()):
+            k = _sin_tildes(w)
+            if len(w) > 3 and k not in _STOP:
+                cnt[k] += 1                        # «participación» y «participacion» cuentan juntas
+                formas.setdefault(k, Counter())[w] += 1
+    if not cnt:
+        return _vacio("Sin respuestas abiertas para los filtros elegidos")
+    c = pd.Series({formas[k].most_common(1)[0][0]: n for k, n in cnt.most_common(top)}).iloc[::-1]
+    fig = go.Figure(go.Bar(x=c.values, y=c.index, orientation="h", marker=dict(color=T["acento"], cornerradius=4),
+                           text=c.values, textposition="outside", cliponaxis=False, textfont=dict(color=TINTA_2),
+                           hovertemplate="<b>%{y}</b><br>aparece %{x} veces<extra></extra>"))
+    fig = _base(fig, max(260, 24 * len(c) + 40))
+    fig.update_xaxes(showgrid=False, showticklabels=False)
+    fig.update_yaxes(showgrid=False, automargin=True)
+    return fig
+
+
 ESCALA_AZUL = [[0, T["escala_s"][0]], [1, T["escala_s"][1]]]
 ESCALA_NARANJA = [[0, T["escala_e"][0]], [1, T["escala_e"][1]]]
 ESCALA_VERDE = [[0, T["escala_d"][0]], [1, T["escala_d"][1]]]
@@ -1387,6 +1612,93 @@ panel_curr_alumnos = ui.nav_panel(
     ),
 )
 
+panel_satisfaccion = ui.nav_panel(
+    "Satisfacción con Intern. Currícula",
+    ui.output_ui("q_aviso"),
+    ui.layout_sidebar(
+        ui.sidebar(
+            ui.layout_columns(
+                ui.input_select("q_desde", "Periodo desde", choices=[]),
+                ui.input_select("q_hasta", "Periodo hasta", choices=[]),
+                col_widths=(6, 6), gap="0.5rem",
+            ),
+            multi("q_prog", "Programa profesional"),
+            multi("q_tipo", "Tipo de actividad"),
+            multi("q_curso", "Curso"),
+            multi("q_sem", "Semestre del curso"),
+            ui.input_action_button("q_reset", "Limpiar filtros", class_="btn-outline-secondary btn-sm"),
+            width=290,
+        ),
+        fuente("encuestas de satisfacción de los alumnos que participaron en actividades de internacionalización de "
+               "la currícula (clases espejo, COIL, etc.), una hoja por periodo. El tipo de actividad de cada curso se "
+               "toma de la base docente (Consoli) según el curso y el periodo. Si un alumno respondió dos veces por el "
+               "mismo curso, se cuenta solo su última respuesta."),
+        ui.layout_column_wrap(
+            kpi("Encuestas respondidas", "q_kpi_n", "Una respuesta por alumno y curso.", "q_kpi_n_nota"),
+            kpi("Calificación general", "q_kpi_cal",
+                "Promedio de «¿Cómo calificarías esta experiencia?»: Deficiente = 1, Regular = 2, Buena = 3, "
+                "Muy Buena = 4, Excelente = 5.", "q_kpi_cal_nota"),
+            kpi("Recomendarían la actividad", "q_kpi_rec", "% que respondió «Sí» a «¿Recomendarías este tipo de "
+                "actividades a otros estudiantes?».", "q_kpi_rec_nota"),
+            kpi("Nivel de acuerdo promedio", "q_kpi_prom",
+                "Promedio de las 14 afirmaciones (1 = muy en desacuerdo, 5 = muy de acuerdo).", "q_kpi_prom_nota"),
+            width=1 / 4, fill=False,
+        ),
+        ui.layout_columns(
+            tarjeta("Calificación general de la experiencia", ui.output_ui("q_g_cal"),
+                    "Número de alumnos según cómo calificaron la experiencia en general. Entre paréntesis, el valor "
+                    "que se usa para el promedio."),
+            tarjeta("¿Recomendarían este tipo de actividades?", ui.output_ui("q_g_rec"),
+                    "% de alumnos según su respuesta."),
+            col_widths=(7, 5),
+        ),
+        tarjeta(
+            ui.div(ui.span("Nivel de acuerdo con cada afirmación"),
+                   ui.div(ui.input_select("q_dim", None, width="230px",
+                                          choices={"": "Todas las dimensiones", **{d: d for d in ENC_DIMENSIONES}}),
+                          class_="ms-auto"),
+                   class_="d-flex align-items-center gap-2"),
+            ui.output_ui("q_g_likert"),
+            "Cada barra suma 100% de las respuestas a esa afirmación; los colores van de 1 (rojo, muy en desacuerdo) "
+            "a 5 (verde, muy de acuerdo). El número a la derecha es el promedio. Pasa el mouse para ver cuántos "
+            "alumnos eligieron cada opción.",
+        ),
+        ui.layout_columns(
+            tarjeta("Promedio por dimensión", ui.output_ui("q_g_dim"),
+                    "Promedio de las afirmaciones de cada dimensión: Aprendizaje (4), Impacto intercultural (4), "
+                    "Logística y soporte (3) y Rol docente (3)."),
+            tarjeta("Promedio por curso", ui.output_ui("q_g_curso"),
+                    "Promedio de las 14 afirmaciones de cada curso, con el número de encuestas (n). El color indica "
+                    "el tipo de actividad."),
+            col_widths=(5, 7),
+        ),
+        tarjeta(
+            ui.div(ui.span("Resultados por curso"),
+                   ui.download_button("q_descargar_cursos", "Descargar (CSV)", class_="btn-sm btn-outline-secondary ms-auto"),
+                   class_="d-flex align-items-center gap-2"),
+            ui.output_data_frame("q_t_cursos"),
+            "Una fila por curso y periodo. «% de acuerdo» = % de respuestas en 4 o 5 entre las 14 afirmaciones.",
+        ),
+        tarjeta(
+            ui.div(ui.span("Palabras más repetidas en las respuestas abiertas"),
+                   ui.div(ui.input_radio_buttons("q_campo", None, inline=True, choices={
+                       "Aspectos a mejorar": "Aspectos a mejorar", "Comentarios": "Comentarios y sugerencias"}),
+                          class_="ms-auto"),
+                   class_="d-flex align-items-center gap-2"),
+            ui.output_ui("q_g_palabras"),
+            "Las 20 palabras que más aparecen (sin artículos, preposiciones ni palabras muy cortas).",
+        ),
+        tarjeta(
+            ui.div(ui.span("Respuestas abiertas"),
+                   ui.download_button("q_descargar_resp", "Descargar (CSV)", class_="btn-sm btn-outline-secondary ms-auto"),
+                   class_="d-flex align-items-center gap-2"),
+            ui.output_data_frame("q_t_resp"),
+            "Alumnos que escribieron algo en «¿Qué aspectos podrían mejorarse?» o en «Comentarios o sugerencias». "
+            "Se puede buscar escribiendo bajo cada columna y descargar en CSV (la descarga incluye todas las respuestas).",
+        ),
+    ),
+)
+
 panel_companygame = ui.nav_panel(
     "Torneo CompanyGame",
     ui.output_ui("cg_aviso"),
@@ -1699,7 +2011,7 @@ app_ui = ui.page_navbar(
     panel_inicio,
     ui.nav_panel(
         "Indicadores de Alumnos",
-        ui.navset_underline(panel_saliente, panel_entrante, panel_curr_alumnos, panel_companygame, id="sub_alumnos"),
+        ui.navset_underline(panel_saliente, panel_entrante, panel_curr_alumnos, panel_satisfaccion, panel_companygame, id="sub_alumnos"),
     ),
     panel_docentes,
     ui.nav_spacer(),
@@ -1826,7 +2138,9 @@ app_ui = ui.page_navbar(
                      border-top: 1px solid {T['grilla']}; padding-top: .5rem; margin-top:auto; }}
         .leyenda-suelta {{ font-size: .78rem; color:{T['nota_texto']}; background:{T['nota_fondo']}; border-radius: 10px;
                            padding: .55rem .8rem; margin-top: 1rem; }}
-        #d_detalle td, #c_tabla_grupo td, #c_tabla_per td, #cg_t_eq td, #cg_t_cat td, #s_tabla_est td, #e_tabla_est td, #c_tabla_alu td, #cg_t_est td {{ white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }}
+        #q_t_resp td {{ vertical-align: top; }}
+        #q_t_resp td:nth-child(4), #q_t_resp td:nth-child(5) {{ min-width: 340px; white-space: normal; }}
+        #d_detalle td, #c_tabla_grupo td, #c_tabla_per td, #cg_t_eq td, #cg_t_cat td, #s_tabla_est td, #e_tabla_est td, #c_tabla_alu td, #cg_t_est td, #q_t_cursos td {{ white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }}
     """)),
 )
 
@@ -2503,6 +2817,184 @@ def server(input, output, session):
     @render.download(filename=lambda: f"actividades_docentes_{datetime.now():%Y%m%d}.csv")
     def d_descargar():
         yield _tabla_detalle().to_csv(index=False, sep=";").encode("utf-8-sig")
+
+    # ============ SATISFACCIÓN CON LA INTERNACIONALIZACIÓN DE LA CURRÍCULA ============
+    @reactive.calc
+    def enc_datos():
+        input.recargar()
+        reactive.invalidate_later(MINUTOS_RECARGA * 60)
+        try:
+            return cargar_encuestas()
+        except Exception as ex:
+            print("ERROR encuestas:", repr(ex))
+            return None, [f"No se pudieron leer las encuestas: {ex}"], 0
+
+    @reactive.calc
+    def enc():
+        e, _a, _d = enc_datos()
+        req(e is not None)
+        e = e.copy()
+        # Tipo de actividad del curso según la base docente (mismo curso y periodo)
+        tipos = {}
+        r = datos()
+        dd = r[2] if r is not None else None
+        if dd is not None and not dd.empty:
+            for (per, cur), g in dd.groupby(["Periodo", "Curso"]):
+                t = sorted(set(g["Tipo"]) & set(TIPOS_CURRICULA))
+                if t:
+                    tipos[(per, _clave(cur))] = ", ".join(t)
+        e["Tipo de actividad"] = [tipos.get((p, _clave(c)), "Sin información") for p, c in zip(e["Periodo"], e["Curso"])]
+        return e
+
+    @render.ui
+    def q_aviso():
+        e, avisos, _d = enc_datos()
+        if avisos:
+            return ui.div(" ".join(avisos), class_="alert alert-warning m-3")
+
+    FILTROS_Q = {"q_prog": "Programa", "q_tipo": "Tipo de actividad", "q_curso": "Curso", "q_sem": "Semestre"}
+    primera_q = {"v": True}
+
+    @reactive.effect
+    def _():
+        e = enc()
+        with reactive.isolate():
+            _poblar(e, FILTROS_Q, "q", limpiar=primera_q["v"])
+        primera_q["v"] = False
+
+    @reactive.effect
+    @reactive.event(input.q_reset)
+    def _():
+        _poblar(enc(), FILTROS_Q, "q", limpiar=True)
+
+    @reactive.calc
+    def q_f():
+        return _filtrar(enc(), input.q_desde(), input.q_hasta(), {col: input[id_]() for id_, col in FILTROS_Q.items()})
+
+    @render.text
+    def q_kpi_n(): return f"{len(q_f()):,}"
+
+    @render.text
+    def q_kpi_n_nota():
+        e = q_f()
+        dup = enc_datos()[2]
+        extra = f" · {dup} respuestas repetidas no se cuentan" if dup else ""
+        return f"{e['Curso'].nunique()} cursos evaluados{extra}"
+
+    @render.text
+    def q_kpi_cal():
+        v = q_f()["Calificación (1-5)"].mean()
+        return "–" if pd.isna(v) else f"{v:.2f}"
+
+    @render.text
+    def q_kpi_cal_nota():
+        e = q_f()
+        n = len(e)
+        if not n:
+            return ""
+        top = e["Calificación"].isin(["Muy Buena", "Excelente"]).sum()
+        return f"{top / n:.0%} la calificó como Muy Buena o Excelente"
+
+    @render.text
+    def q_kpi_rec():
+        e = q_f()
+        return "–" if e.empty else f"{(e['Recomienda'] == 'Sí').mean():.0%}"
+
+    @render.text
+    def q_kpi_rec_nota():
+        e = q_f()
+        if e.empty:
+            return ""
+        return f"Tal vez: {(e['Recomienda'] == 'Tal vez').mean():.0%} · No: {(e['Recomienda'] == 'No').mean():.0%}"
+
+    @render.text
+    def q_kpi_prom():
+        v = q_f()[ENC_LABELS].stack().mean()
+        return "–" if pd.isna(v) else f"{v:.2f}"
+
+    @render.text
+    def q_kpi_prom_nota():
+        v = q_f()[ENC_LABELS].stack()
+        return "" if v.empty else f"{(v >= 4).mean():.0%} de las respuestas en 4 o 5"
+
+    @render.ui
+    def q_g_cal(): return _html(enc_calificacion(q_f()))
+
+    @render.ui
+    def q_g_rec(): return _html(enc_recomendacion(q_f()))
+
+    @render.ui
+    def q_g_likert(): return _html(enc_likert(q_f(), input.q_dim() or None))
+
+    @render.ui
+    def q_g_dim(): return _html(enc_dimensiones(q_f()))
+
+    def _q_cursos():
+        e = q_f()
+        cols = ["Periodo", "Curso", "Tipo de actividad", "Encuestas", "Promedio afirmaciones", "Calificación general",
+                "% recomienda", "% de acuerdo"] + ENC_DIMENSIONES
+        if e.empty:
+            return pd.DataFrame(columns=cols)
+        filas = []
+        for (per, cur, tipo), g in e.groupby(["Periodo", "Curso", "Tipo de actividad"]):
+            v = g[ENC_LABELS].stack()
+            fila = {"Periodo": per, "Curso": cur, "Tipo de actividad": tipo, "Encuestas": len(g),
+                    "Promedio afirmaciones": v.mean(), "Calificación general": g["Calificación (1-5)"].mean(),
+                    "% recomienda": (g["Recomienda"] == "Sí").mean(), "% de acuerdo": (v >= 4).mean()}
+            for d in ENC_DIMENSIONES:
+                fila[d] = g[[x[1] for x in ENC_ITEMS if x[2] == d]].stack().mean()
+            filas.append(fila)
+        return pd.DataFrame(filas)[cols]
+
+    @render.ui
+    def q_g_curso(): return _html(enc_cursos(_q_cursos()))
+
+    def _q_cursos_tabla():
+        t = _q_cursos().sort_values(["Periodo", "Promedio afirmaciones"], ascending=[False, False])
+        for c in ["Promedio afirmaciones", "Calificación general"] + ENC_DIMENSIONES:
+            t[c] = t[c].map(lambda v: "" if pd.isna(v) else round(v, 2))
+        for c in ["% recomienda", "% de acuerdo"]:
+            t[c] = t[c].map(lambda v: "" if pd.isna(v) else f"{v:.0%}")
+        return t
+
+    @render.data_frame
+    def q_t_cursos():
+        return render.DataGrid(_q_cursos_tabla(), filters=True, width="100%", height="380px")
+
+    @render.download(filename=lambda: f"satisfaccion_por_curso_{datetime.now():%Y%m%d}.csv")
+    def q_descargar_cursos():
+        yield _q_cursos_tabla().to_csv(index=False, sep=";").encode("utf-8-sig")
+
+    def _q_texto_util(v):
+        t = re.sub(r"[^a-záéíóúñü]", "", str(v).lower())
+        return len(t) >= 3
+
+    @render.ui
+    def q_g_palabras():
+        e = q_f()
+        campo = input.q_campo() or "Aspectos a mejorar"
+        return _html(enc_palabras(e.loc[e[campo].map(_q_texto_util), campo]))
+
+    def _q_resp(solo_texto=True):
+        e = q_f()
+        if solo_texto:
+            e = e[e["Aspectos a mejorar"].map(_q_texto_util) | e["Comentarios"].map(_q_texto_util)]
+        cols = ["Curso", "Calificación", "Recomienda", "Aspectos a mejorar", "Comentarios", "Correo", "Programa",
+                "Semestre", "Tipo de actividad", "Periodo"]
+        return e[cols].rename(columns={"Programa": "Programa profesional", "Semestre": "Semestre del curso"}) \
+                      .sort_values(["Periodo", "Curso"], ascending=[False, True], kind="stable") \
+                      .rename(columns={"Recomienda": "¿Recomendaría?"})
+
+    @render.data_frame
+    def q_t_resp():
+        return render.DataGrid(_q_resp(), filters=True, width="100%", height="520px")
+
+    @render.download(filename=lambda: f"satisfaccion_respuestas_{datetime.now():%Y%m%d}.csv")
+    def q_descargar_resp():
+        e = q_f()
+        cols = ["Periodo", "Fecha", "Correo", "Programa", "Curso", "Tipo de actividad", "Semestre"] + ENC_LABELS + \
+               ["Calificación", "Recomienda", "Aspectos a mejorar", "Comentarios"]
+        yield e[cols].to_csv(index=False, sep=";").encode("utf-8-sig")
 
     # ============ TORNEO COMPANYGAME ============
     cg_error = reactive.value(None)
