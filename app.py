@@ -1200,23 +1200,24 @@ panel_curricula = ui.nav_panel(
                "internacional de un docente UCSP registrada para una carrera (ADM o CONT); una actividad para ambas "
                "carreras aparece en dos filas. No se usan correos, evidencias ni enlaces de encuestas."),
         ui.layout_column_wrap(
-            kpi("Actividades del indicador", "d_kpi_ind",
-                "Clase Espejo + COIL + Profesor Visitante. Cada actividad cuenta una vez."),
-            kpi("Clases espejo", "d_kpi_ce", "Clases espejo distintas (compartida ADM-CONT = 1)."),
-            kpi("COIL", "d_kpi_coil", "COIL distintos (compartido ADM-CONT = 1)."),
-            kpi("Profesores visitantes", "d_kpi_pv", "Actividades de profesor visitante distintas."),
-            kpi("Otras actividades", "d_kpi_otras",
-                "Actividad internacional, postulación, congresos, etc. No entran al indicador."),
             kpi("Docentes UCSP participantes", "d_kpi_doc",
                 "Docentes UCSP distintos con al menos una actividad."),
-            kpi("% de docentes de la Facultad que participan", "d_kpi_doc_pct",
+            kpi("% de docentes que participan", "d_kpi_doc_pct",
                 "Docentes UCSP participantes ÷ docentes de la Facultad. Por ahora se usa el total de 2026-02 "
                 "(Administración de Negocios 87, Contabilidad 57; 105 en la Facultad, sin contar dos veces a quien "
                 "enseña en ambas carreras) para todos los periodos, hasta tener el dato de los demás.",
                 "d_kpi_doc_pct_nota"),
-            kpi("Universidades socias", "d_kpi_uni", "Universidades contraparte distintas."),
+            kpi("Actividades totales", "d_kpi_ind",
+                "Todas las actividades: clase espejo, COIL, profesor visitante y otras. Cada actividad cuenta una vez."),
+            kpi("Clases espejo", "d_kpi_ce", "Clases espejo distintas (compartida ADM-CONT = 1)."),
+            kpi("COIL", "d_kpi_coil", "COIL distintos (compartido ADM-CONT = 1)."),
+            kpi("Profesores visitantes", "d_kpi_pv", "Actividades de profesor visitante distintas."),
+            kpi("Otras actividades", "d_kpi_otras",
+                "Actividad internacional, postulación, congresos, etc. (todo lo que no es clase espejo, COIL ni "
+                "profesor visitante)."),
             kpi("Alumnos participantes", "d_kpi_alu",
                 "Suma de N° alumnos ADM + CONT de cada actividad (una vez por actividad)."),
+            kpi("Universidades socias", "d_kpi_uni", "Universidades contraparte distintas."),
             width=1 / 3, fill=False,
         ),
         ui.div(
@@ -1548,7 +1549,8 @@ panel_presentacion = ui.nav_panel(
             "Cómo usarlo",
             ui.div(
                 ui.div(ui.strong("Filtros"), ui.span(" — en el panel izquierdo de cada pestaña: periodo desde/hasta, "
-                                                     "escuela, país, etc. Se aplican a todo lo que ves en esa pestaña."), class_="tip"),
+                                                     "escuela, país, etc. Se aplican a todo lo que ves en esa pestaña. Cada pestaña abre "
+                                                     "en el semestre en curso; para ver el histórico, cambia «Periodo desde»."), class_="tip"),
                 ui.div(ui.strong("Gráficos"), ui.span(" — pasa el mouse sobre una barra o país para ver el valor exacto; "
                                                       "con el botón de ampliar (esquina inferior derecha) se ven a pantalla completa."), class_="tip"),
                 ui.div(ui.strong("Notas en gris"), ui.span(" — explican de dónde salen los datos y cómo se calcula "
@@ -1807,6 +1809,19 @@ def _periodos(df):
     return sorted(p for p in df["Periodo"].unique() if re.fullmatch(r"\d{4}-\d{2}", str(p)))
 
 
+def _periodo_actual() -> str:
+    """Semestre en curso según la fecha de hoy: enero–julio = AAAA-01, agosto–diciembre = AAAA-02."""
+    hoy = datetime.now()
+    return f"{hoy.year}-{'01' if hoy.month <= 7 else '02'}"
+
+
+def _periodo_inicial(per: list) -> str:
+    """Periodo con el que abre cada pestaña: el último ya iniciado (no los futuros, p. ej. movilidades
+    programadas para el próximo año). Si la base aún no tiene el semestre en curso, el más reciente que tenga."""
+    hasta_hoy = [p for p in per if p <= _periodo_actual()]
+    return hasta_hoy[-1] if hasta_hoy else per[-1]
+
+
 def _filtrar(df, desde, hasta, filtros: dict):
     validos = _periodos(df)
     d = df
@@ -1881,8 +1896,9 @@ def server(input, output, session):
         per = _periodos(df)
         if per:
             d_act, h_act = input[f"{pre}_desde"](), input[f"{pre}_hasta"]()
-            desde = per[0] if limpiar or d_act not in per else d_act
-            hasta = per[-1] if limpiar or h_act not in per else h_act
+            inicial = _periodo_inicial(per)
+            desde = inicial if limpiar or d_act not in per else d_act
+            hasta = inicial if limpiar or h_act not in per else h_act
             ui.update_select(f"{pre}_desde", choices=per, selected=desde)
             ui.update_select(f"{pre}_hasta", choices=per, selected=hasta)
 
@@ -2279,7 +2295,7 @@ def server(input, output, session):
         return f"{int(a['Tipo'].isin(tipos).sum()):,}"
 
     @render.text
-    def d_kpi_ind(): return _n_tipo(TIPOS_INDICADOR)
+    def d_kpi_ind(): return f"{len(d_act()):,}"
     @render.text
     def d_kpi_ce(): return _n_tipo(["Clase Espejo"])
     @render.text
