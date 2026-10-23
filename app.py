@@ -281,7 +281,10 @@ def cargar_docentes(libro: pd.ExcelFile):
     out["Tipo (gráfico)"] = out["Tipo"].where(out["Tipo"].isin(TIPOS_PRINCIPALES), "Otras actividades")
     out["ISO3"] = out["País"].map(lambda p: ISO3.get(_sin_tildes(str(p))))
     # Una misma actividad aparece una vez por carrera: se identifica para no contarla doble en totales
-    clave = ["Periodo", "Tipo", "Profesor UCSP", "Curso", "Grupo", "Universidad", "Descripción", "Fecha"]
+    # En profesor visitante, cada par académico cuenta como una actividad aparte (una sesión con dos visitantes = 2)
+    par = out["Par académico"].str.strip().str.lower()
+    out["_par"] = par.where((out["Tipo"] == "Profesor Visitante") & ~par.isin(["", "n.a.", "no aplica"]), "")
+    clave = ["Periodo", "Tipo", "Profesor UCSP", "Curso", "Grupo", "Universidad", "Descripción", "Fecha", "_par"]
     out["ID"] = out.groupby(clave, dropna=False, sort=False).ngroup()
     return out.reset_index(drop=True), None
 
@@ -1482,8 +1485,9 @@ panel_curricula = ui.nav_panel(
                           class_="ms-auto"),
                    class_="d-flex align-items-center gap-2"),
             ui.output_ui("d_g_periodo"),
-            "Actividades distintas por periodo (columna Semestre). Al desagregar por carrera, una actividad "
-            "compartida por ADM y CONT se cuenta en ambas (igual que en el Resumen de Actividades).",
+            "Actividades distintas por periodo (columna Semestre). En profesor visitante cuenta cada par académico "
+            "(una sesión con dos visitantes suma dos). Al desagregar por carrera, una actividad compartida por ADM "
+            "y CONT se cuenta en ambas (igual que en el Resumen de Actividades).",
         ),
         tarjeta("Resumen de actividades por carrera y periodo", ui.output_data_frame("d_resumen"),
                 "Mismo cálculo que la pestaña 'Resumen Actividades' de la base docente: número de filas de Consoli "
@@ -2716,13 +2720,8 @@ def server(input, output, session):
     @render.text
     def d_kpi_coil(): return _n_tipo(["COIL"])
     def _n_pv() -> int:
-        """Profesores visitantes: por cada actividad, número de pares académicos distintos (mínimo 1)."""
-        f = d_filas()
-        f = f[f["Tipo"] == "Profesor Visitante"]
-        if f.empty:
-            return 0
-        pares = f["Par académico"].where(~f["Par académico"].isin(["", "N.A.", "No aplica"])).str.strip().str.lower()
-        return int(pares.groupby(f["ID"]).nunique().clip(lower=1).sum())
+        """Profesores visitantes: cada par académico de cada actividad cuenta uno (ver cargar_docentes)."""
+        return int((d_act()["Tipo"] == "Profesor Visitante").sum())
 
     @render.text
     def d_kpi_pv(): return f"{_n_pv():,}"
@@ -2732,8 +2731,8 @@ def server(input, output, session):
         f = f[f["Tipo"] == "Profesor Visitante"]
         p = f["Par académico"]
         n = p[~p.isin(["", "N.A.", "No aplica"])].str.strip().str.lower().nunique()
-        act = f["ID"].nunique()
-        return (f"{act} actividad{'es' if act != 1 else ''} · {n} académico{'s' if n != 1 else ''} "
+        act = len(f.drop_duplicates(["Periodo", "Profesor UCSP", "Universidad", "Descripción", "Fecha"]))
+        return (f"{act} sesion{'es' if act != 1 else ''} · {n} académico{'s' if n != 1 else ''} "
                 f"distinto{'s' if n != 1 else ''}")
     @render.text
     def d_kpi_otras():
