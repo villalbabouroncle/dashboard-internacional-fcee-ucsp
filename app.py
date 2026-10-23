@@ -199,7 +199,7 @@ def _txt(v):
         return v.strftime("%d/%m/%Y")
     if isinstance(v, float) and v.is_integer():
         v = int(v)
-    t = re.sub(r"\s+", " ", str(v)).strip()
+    t = re.sub(r"\s+", " ", str(v).replace("_x000D_", " ")).strip()
     return t or None
 
 
@@ -388,6 +388,10 @@ def actividades_unicas(filas: pd.DataFrame) -> pd.DataFrame:
     g = filas.groupby("ID", sort=False)
     act = g.first()
     act["Carreras"] = g["Carrera"].agg(lambda s: ", ".join(sorted(set(s))))
+    # Una misma actividad puede tener varios pares académicos (una fila por cada uno): se muestran todos
+    if "Par académico" in filas:
+        act["Par académico"] = g["Par académico"].agg(
+            lambda s: ", ".join(dict.fromkeys(x for x in s if x and x not in ("N.A.", "No aplica"))))
     alumnos = g["Alumnos ADM"].max().fillna(0) + g["Alumnos CONT"].max().fillna(0)
     sin_dato = g["Alumnos ADM"].max().isna() & g["Alumnos CONT"].max().isna()
     act["Alumnos"] = alumnos.mask(sin_dato)
@@ -1447,10 +1451,12 @@ panel_curricula = ui.nav_panel(
                 "enseña en ambas carreras) para todos los periodos, hasta tener el dato de los demás.",
                 "d_kpi_doc_pct_nota"),
             kpi("Actividades totales", "d_kpi_ind",
-                "Todas las actividades: clase espejo, COIL, profesor visitante y otras. Cada actividad cuenta una vez."),
+                "Clases espejo + COIL + profesores visitantes + otras actividades. En profesor visitante cuenta cada "
+                "par académico (una sesión con dos visitantes suma dos)."),
             kpi("Clases espejo", "d_kpi_ce", "Clases espejo distintas (compartida ADM-CONT = 1)."),
             kpi("COIL", "d_kpi_coil", "COIL distintos (compartido ADM-CONT = 1)."),
-            kpi("Profesores visitantes", "d_kpi_pv", "Actividades de profesor visitante distintas."),
+            kpi("Profesores visitantes", "d_kpi_pv", "Cada académico visitante cuenta en cada actividad en la que "
+                "participó: si una actividad tuvo dos pares académicos, suma dos.", "d_kpi_pv_nota"),
             kpi("Otras actividades", "d_kpi_otras",
                 "Actividad internacional, postulación, congresos, etc. (todo lo que no es clase espejo, COIL ni "
                 "profesor visitante)."),
@@ -2702,13 +2708,33 @@ def server(input, output, session):
         return f"{int(a['Tipo'].isin(tipos).sum()):,}"
 
     @render.text
-    def d_kpi_ind(): return f"{len(d_act()):,}"
+    def d_kpi_ind():
+        a = d_act()
+        return f"{int((a['Tipo'] != 'Profesor Visitante').sum()) + _n_pv():,}"
     @render.text
     def d_kpi_ce(): return _n_tipo(["Clase Espejo"])
     @render.text
     def d_kpi_coil(): return _n_tipo(["COIL"])
+    def _n_pv() -> int:
+        """Profesores visitantes: por cada actividad, número de pares académicos distintos (mínimo 1)."""
+        f = d_filas()
+        f = f[f["Tipo"] == "Profesor Visitante"]
+        if f.empty:
+            return 0
+        pares = f["Par académico"].where(~f["Par académico"].isin(["", "N.A.", "No aplica"])).str.strip().str.lower()
+        return int(pares.groupby(f["ID"]).nunique().clip(lower=1).sum())
+
     @render.text
-    def d_kpi_pv(): return _n_tipo(["Profesor Visitante"])
+    def d_kpi_pv(): return f"{_n_pv():,}"
+    @render.text
+    def d_kpi_pv_nota():
+        f = d_filas()
+        f = f[f["Tipo"] == "Profesor Visitante"]
+        p = f["Par académico"]
+        n = p[~p.isin(["", "N.A.", "No aplica"])].str.strip().str.lower().nunique()
+        act = f["ID"].nunique()
+        return (f"{act} actividad{'es' if act != 1 else ''} · {n} académico{'s' if n != 1 else ''} "
+                f"distinto{'s' if n != 1 else ''}")
     @render.text
     def d_kpi_otras():
         a = d_act()
