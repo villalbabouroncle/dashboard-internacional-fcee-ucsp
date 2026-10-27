@@ -8,10 +8,12 @@ Lee la base directamente desde Google Drive cada vez que se abre
 Los detalles por estudiante muestran nombres, correos y códigos (decisión de la Facultad para el seguimiento).
 """
 
+import hmac
 import io
 import json
 import os
 import re
+import time
 import unicodedata
 import urllib.request
 from datetime import datetime
@@ -134,6 +136,10 @@ URL_XLSX = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xls
 ARCHIVO_LOCAL = Path(__file__).parent / "data" / "base.xlsx"
 
 MINUTOS_RECARGA = 10
+
+# Clave de acceso: se define como variable secreta DASH_CLAVE en Connect Cloud (Settings → Variables).
+# Nunca se escribe aquí, porque el repositorio es público. Si la variable no existe, el dashboard no pide clave.
+CLAVE = os.environ.get("DASH_CLAVE", "")
 
 # Torneo CompanyGame: base unificada (hoja aparte, compartida como "Cualquier persona con el enlace")
 CG_SHEET_ID = "1XI5cre6hGCRHsshf4hh9HlVCIdBu0QSTXknRY2wbURM"
@@ -2131,6 +2137,12 @@ app_ui = ui.page_navbar(
         #sub_inicio .nav-link, #sub_alumnos .nav-link, #sub_docentes .nav-link {{ color:{T['tinta_2']} !important; font-weight:500; }}
         #sub_inicio .nav-link.active, #sub_alumnos .nav-link.active, #sub_docentes .nav-link.active {{ color:{T['tinta']} !important; border-bottom-color:{T['acento']}; }}
         .card-header .form-group {{ margin-bottom: 0; }}
+        /* ---- Pantalla de clave ---- */
+        .modal-backdrop.show {{ opacity: 1; background:{T['fondo']}; }}
+        .clave-caja {{ padding: .75rem .5rem .25rem; }}
+        .clave-titulo {{ font-size: 1.25rem; font-weight: 700; color:{T['tinta']}; }}
+        .clave-sub {{ color:{T['tinta_2']}; font-size: .9rem; margin: .25rem 0 1rem; }}
+        .clave-error {{ color:#e66767; font-size: .85rem; margin-top: .5rem; }}
         /* ---- Periodos como botones ---- */
         .per-botones {{ margin-bottom: 1rem; }}
         .per-botones .control-label {{ margin-bottom: .35rem; }}
@@ -2285,8 +2297,49 @@ def server(input, output, session):
 
     error = reactive.value(None)
 
+    # ----- Acceso con clave: hasta ingresarla no se carga ningún dato -----
+    autenticado = reactive.value(not CLAVE)
+    intentos = {"n": 0}
+
+    def _pedir_clave(msg=None):
+        ui.modal_show(ui.modal(
+            ui.div(
+                ui.div("Internacionalización FCEE", class_="clave-titulo"),
+                ui.p("Ingresa la clave para ver el dashboard.", class_="clave-sub"),
+                ui.input_password("clave", None, placeholder="Clave", width="100%"),
+                ui.div(msg, class_="clave-error") if msg else None,
+                ui.input_action_button("entrar", "Entrar", class_="btn-primary w-100 mt-3"),
+                ui.tags.script("""
+                    setTimeout(function(){
+                      var c = document.getElementById('clave'); if (!c) return; c.focus();
+                      c.addEventListener('keyup', function(e){
+                        if (e.key === 'Enter') { Shiny.setInputValue('clave', c.value, {priority:'event'});
+                                                 document.getElementById('entrar').click(); }
+                      });
+                    }, 300);"""),
+                class_="clave-caja",
+            ),
+            title=None, footer=None, easy_close=False, size="s", fade=False,
+        ))
+
+    if CLAVE:
+        _pedir_clave()
+
+    @reactive.effect
+    @reactive.event(input.entrar)
+    def _():
+        if hmac.compare_digest(str(input.clave() or "").encode(), CLAVE.encode()):
+            autenticado.set(True)
+            ui.modal_remove()
+        else:
+            intentos["n"] += 1
+            time.sleep(min(intentos["n"], 5))            # cada intento fallido espera un poco más
+            ui.modal_remove()
+            _pedir_clave("Clave incorrecta. Inténtalo de nuevo.")
+
     @reactive.calc
     def datos():
+        req(autenticado())
         input.recargar()                                   # botón manual
         reactive.invalidate_later(MINUTOS_RECARGA * 60)    # recarga automática
         try:
@@ -2971,6 +3024,7 @@ def server(input, output, session):
     # ============ SATISFACCIÓN CON LA INTERNACIONALIZACIÓN DE LA CURRÍCULA ============
     @reactive.calc
     def enc_datos():
+        req(autenticado())
         input.recargar()
         reactive.invalidate_later(MINUTOS_RECARGA * 60)
         try:
@@ -3151,6 +3205,7 @@ def server(input, output, session):
 
     @reactive.calc
     def cg_datos():
+        req(autenticado())
         input.recargar()
         reactive.invalidate_later(MINUTOS_RECARGA * 60)
         try:
