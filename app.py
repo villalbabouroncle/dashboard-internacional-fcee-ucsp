@@ -37,11 +37,94 @@ TIPOS_CURRICULA = ["Clase Espejo", "Profesor Visitante", "COIL"]
 ESCUELAS = {"ADM": "Administración de Negocios", "CONT": "Contabilidad"}
 TIPOS_INDICADOR = ["Clase Espejo", "COIL", "Profesor Visitante"]
 TIPOS_PRINCIPALES = TIPOS_INDICADOR + ["Actividad Internacional", "Postulación"]
-# Docentes de la Facultad (denominador del % de docentes participantes).
-# Por ahora solo se tiene el dato de 2026-02 y se usa para todos los periodos.
-# Cuando se tengan otros periodos, agrégalos aquí con la misma estructura.
-DOCENTES_FACULTAD = {
-    "2026-02": {"Administración de Negocios": 87, "Contabilidad": 57, "Facultad": 105},
+# Docentes de la Facultad por periodo (denominador del % de docentes que participan).
+# Información proporcionada por el coordinador administrativo de la facultad.
+# Cada docente es un código anónimo de 8 caracteres generado a partir de su DNI (no contiene nombres, DNI ni
+# correos). Sirve para que, al elegir varios periodos, cada docente cuente una sola vez.
+# Para agregar un periodo, pásale a Claude la lista de docentes del periodo y genera los códigos.
+DOCENTES_FACULTAD_IDS = {
+    "2025-01": {
+        "Administración de Negocios": """
+            0544eb3f 0c581d56 0dce0df8 11ac876f 17634421 193425e4 1d75ffcf 1e84ee6f 2520d283 25c832f8
+            2700b99b 273224f6 27df6a66 2b5d8160 2c5f31a8 2e759b27 2f413f05 3156b2ae 3262dfd0 32dc120b
+            34678430 37b85856 39454449 3c50d30f 3c59a46c 3cd13290 3f2cf6b0 4056c176 433940b8 4a889974
+            4b9f100c 4c2ff615 4d83cf06 5a3884c5 5b397e7d 6167d997 6246e1e0 6ecc90db 6eea8f78 6efcd10c
+            7157871a 746b5165 757a6f15 7d4aadb2 7fe4cc21 8232e153 83fc7cf1 88d14922 88fc84ca 89957cec
+            8a8daa04 8ce8abe0 918912c3 9213183e 92419f23 984a45b9 99d1b264 a47a8baa a61841e1 ab10cb2d
+            ab8036c1 b8f4f564 ba236f11 bc0e6b3c bc340010 c2436869 c547ec1f c5e2ce91 c8ac9261 c9c49e17
+            cbbf0aac cbf57e79 d0cb9ed6 d312138b d31eb6f5 d6366e40 dc03a6e2 de8c5d7d eb2f08f6 efa8642d
+            f77db332 f798771e f806f46a fb4f54e3 fce8e78f ff091d00 ff90dbac
+        """.split(),
+        "Contabilidad": """
+            02a86056 083997b4 0c581d56 0dce0df8 1583f79d 17634421 193425e4 1e84ee6f 2b5d8160 2e759b27
+            303f94cd 3156b2ae 3262dfd0 33f7c78d 34678430 3cd13290 4a889974 4b9f100c 4c2ff615 4d83cf06
+            57cd9f82 607f1285 6246e1e0 6eea8f78 6efcd10c 7157871a 746b5165 7d4aadb2 7e2cd05a 7fe4cc21
+            88fc84ca 89957cec 92419f23 984a45b9 a47a8baa ab10cb2d ab8036c1 afd0c02b b8f4f564 bc340010
+            c547ec1f c5e2ce91 cb887f6e cbf57e79 d312138b d45277f8 d6366e40 dc03a6e2 dc45b0b5 de8c5d7d
+            e0da78a0 eb2f08f6 f77db332 f798771e f806f46a fb4f54e3 fddced5f
+        """.split(),
+    },
+    "2025-02": {
+        "Administración de Negocios": """
+            0c581d56 0dce0df8 11ac876f 17634421 193425e4 1d75ffcf 2520d283 25c832f8 2b5d8160 2c5f31a8
+            2f413f05 3156b2ae 34678430 37b85856 39454449 3c50d30f 3c59a46c 3cd13290 3f2cf6b0 4056c176
+            433940b8 4a889974 4b9f100c 4c2ff615 4d83cf06 5a3884c5 5b397e7d 6167d997 6246e1e0 6eea8f78
+            6efcd10c 7157871a 757a6f15 75def08c 7d4aadb2 8232e153 83fc7cf1 87db642a 88d14922 88fc84ca
+            89957cec 918912c3 9213183e 92419f23 99d1b264 a47a8baa a61841e1 ab10cb2d b8f4f564 ba236f11
+            bc0e6b3c bc340010 c2436869 c50c9cf3 c5e2ce91 c8ac9261 c9c49e17 cbf57e79 d0cb9ed6 d31eb6f5
+            d393fb0f d6366e40 dc03a6e2 de8c5d7d e89e2135 efa8642d f77db332 fb4f54e3 fce8e78f fddced5f
+            ff091d00 ff90dbac
+        """.split(),
+        "Contabilidad": """
+            083997b4 0c581d56 0dce0df8 193425e4 2b5d8160 2b804842 303f94cd 3156b2ae 33f7c78d 34678430
+            37b85856 4a889974 4d83cf06 5a0fa63d 6246e1e0 6eea8f78 7157871a 746b5165 7e2cd05a 89957cec
+            918912c3 a47a8baa ab10cb2d afd0c02b b8f4f564 ba236f11 c5e2ce91 c8ac9261 cb887f6e cbf57e79
+            d312138b d393fb0f d45277f8 dc03a6e2 dc45b0b5 de8c5d7d f77db332 f798771e f806f46a fb4f54e3
+            fddced5f
+        """.split(),
+    },
+    "2026-01": {
+        "Administración de Negocios": """
+            0544eb3f 0c581d56 0dce0df8 11ac876f 17634421 193425e4 1948e567 1d75ffcf 1e84ee6f 2520d283
+            25c832f8 27df6a66 2b5d8160 2c5f31a8 3156b2ae 3262dfd0 32dc120b 34678430 37b85856 39454449
+            3c50d30f 3c59a46c 3cd13290 3f2cf6b0 4056c176 433940b8 4a889974 4b9f100c 4c2ff615 4d83cf06
+            5b397e7d 6167d997 6246e1e0 638f36b6 6ecc90db 6eea8f78 7157871a 73648a03 746b5165 757a6f15
+            7d4aadb2 8232e153 83fc7cf1 88d14922 88fc84ca 89957cec 8ce8abe0 918912c3 9213183e 92419f23
+            984a45b9 99d1b264 a47a8baa a61841e1 ab10cb2d ab8036c1 b8f4f564 ba236f11 bc0e6b3c bc340010
+            c2436869 c50c9cf3 c5e2ce91 c8ac9261 c9c49e17 cbf57e79 d0cb9ed6 d393fb0f d3fb639a d45277f8
+            dc03a6e2 de8c5d7d e89e2135 eb2f08f6 efa8642d f77db332 fb4f54e3 fce8e78f fddced5f ff091d00
+            ff90dbac
+        """.split(),
+        "Contabilidad": """
+            083997b4 0c581d56 0dce0df8 11ac876f 193425e4 1e84ee6f 27df6a66 2b5d8160 2b804842 303f94cd
+            3156b2ae 33f7c78d 34678430 37b85856 462dfc77 4c2ff615 4d83cf06 57cd9f82 607f1285 6246e1e0
+            638f36b6 6eea8f78 7157871a 73648a03 746b5165 7e2cd05a 88fc84ca 89957cec 918912c3 a47a8baa
+            ab8036c1 afd0c02b b8f4f564 ba236f11 bc340010 c5e2ce91 c8ac9261 cb887f6e cbf57e79 cf9b3958
+            d312138b d393fb0f dc03a6e2 dc45b0b5 de8c5d7d e0da78a0 f77db332 f798771e f806f46a fb4f54e3
+            fddced5f
+        """.split(),
+    },
+    "2026-02": {
+        "Administración de Negocios": """
+            0544eb3f 0c581d56 0dce0df8 11ac876f 13a53b1b 17634421 177392d0 193425e4 1948e567 1d14480d
+            1e84ee6f 2520d283 25c832f8 2700b99b 273224f6 27df6a66 29aaebee 2afefda8 2b5d8160 2c5f31a8
+            3156b2ae 3262dfd0 32dc120b 34678430 39454449 3c50d30f 3c59a46c 3cd13290 3f2cf6b0 4056c176
+            433940b8 4a889974 4c2ff615 4d83cf06 52dafee8 5a3884c5 5b397e7d 6167d997 638f36b6 65413005
+            6ecc90db 6eea8f78 6efcd10c 73648a03 746b5165 757a6f15 7d4aadb2 7fe4cc21 8232e153 83fc7cf1
+            87db642a 88d14922 88fc84ca 89957cec 8ce8abe0 918912c3 9213183e 92419f23 996c807a 9e2672e9
+            a47a8baa a47ef11c a61841e1 a86e7f51 ab10cb2d ab8036c1 b8f4f564 bc0e6b3c bc340010 c2436869
+            c4e6e87c c50c9cf3 c8ac9261 c9c49e17 cbf57e79 d0cb9ed6 d393fb0f d3fb639a dc03a6e2 de8c5d7d
+            eb2f08f6 efa8642d f77db332 fb4f54e3 fce8e78f fddced5f ff091d00
+        """.split(),
+        "Contabilidad": """
+            083997b4 0c581d56 0dce0df8 11ac876f 193425e4 1948e567 1d14480d 2b5d8160 2b804842 2c5f31a8
+            303f94cd 3156b2ae 3262dfd0 33f7c78d 34678430 462dfc77 4c2ff615 4d83cf06 52dafee8 57cd9f82
+            5a3884c5 607f1285 638f36b6 65413005 6eea8f78 73648a03 746b5165 7e2cd05a 7fe4cc21 88fc84ca
+            89957cec 918912c3 996c807a a47ef11c a772711b a86e7f51 ab10cb2d ab8036c1 afd0c02b b8f4f564
+            bc340010 c8ac9261 cb887f6e cbf57e79 cf9b3958 d312138b d3fb639a dc03a6e2 dc45b0b5 de418542
+            de8c5d7d e0da78a0 f77db332 f798771e f806f46a fddced5f
+        """.split(),
+    },
 }
 
 # Descarga todo el libro como .xlsx (respeta los tipos de cada celda)
@@ -1244,6 +1327,19 @@ RUTAS = {
 # ─────────────────────────────────────────────────────────────
 # INTERFAZ
 # ─────────────────────────────────────────────────────────────
+def periodos(pre):
+    """Periodos como botones: se puede marcar cualquier combinación (sin marcar ninguno = todos)."""
+    return ui.div(
+        ui.div(ui.tags.label("Periodos", class_="control-label"),
+               ui.div(ui.input_action_link(f"{pre}_per_actual", "Actual"), " · ",
+                      ui.input_action_link(f"{pre}_per_todos", "Todos"), " · ",
+                      ui.input_action_link(f"{pre}_per_ninguno", "Ninguno"), class_="per-acciones"),
+               class_="d-flex justify-content-between align-items-baseline"),
+        ui.input_checkbox_group(f"{pre}_per", None, choices=[], inline=True),
+        class_="per-botones",
+    )
+
+
 def multi(id_, etiqueta):
     return ui.input_selectize(id_, etiqueta, choices=[], multiple=True,
                               options={"placeholder": "Todos", "plugins": ["remove_button"]})
@@ -1281,11 +1377,7 @@ panel_saliente = ui.nav_panel(
     "Movilidad saliente",
     ui.layout_sidebar(
         ui.sidebar(
-            ui.layout_columns(
-                ui.input_select("s_desde", "Periodo desde", choices=[]),
-                ui.input_select("s_hasta", "Periodo hasta", choices=[]),
-                col_widths=(6, 6), gap="0.5rem",
-            ),
+            periodos("s"),
             multi("s_esc", "Esc. Prof. UCSP"),
             multi("s_dur", "Modalidad (duración)"),
             multi("s_for", "Modalidad (presencial/virtual)"),
@@ -1356,11 +1448,7 @@ panel_entrante = ui.nav_panel(
     "Movilidad entrante",
     ui.layout_sidebar(
         ui.sidebar(
-            ui.layout_columns(
-                ui.input_select("e_desde", "Periodo desde", choices=[]),
-                ui.input_select("e_hasta", "Periodo hasta", choices=[]),
-                col_widths=(6, 6), gap="0.5rem",
-            ),
+            periodos("e"),
             multi("e_car", "Carrera"),
             multi("e_pais", "País de origen"),
             multi("e_uni", "Universidad de origen"),
@@ -1425,11 +1513,7 @@ panel_curricula = ui.nav_panel(
     ui.output_ui("d_aviso"),
     ui.layout_sidebar(
         ui.sidebar(
-            ui.layout_columns(
-                ui.input_select("d_desde", "Periodo desde", choices=[]),
-                ui.input_select("d_hasta", "Periodo hasta", choices=[]),
-                col_widths=(6, 6), gap="0.5rem",
-            ),
+            periodos("d"),
             multi("d_car", "Carrera"),
             multi("d_tipo", "Tipo de actividad"),
             multi("d_mod", "Modalidad"),
@@ -1449,9 +1533,9 @@ panel_curricula = ui.nav_panel(
             kpi("Docentes UCSP participantes", "d_kpi_doc",
                 "Docentes UCSP distintos con al menos una actividad."),
             kpi("% de docentes que participan", "d_kpi_doc_pct",
-                "Docentes UCSP participantes ÷ docentes de la Facultad. Por ahora se usa el total de 2026-02 "
-                "(Administración de Negocios 87, Contabilidad 57; 105 en la Facultad, sin contar dos veces a quien "
-                "enseña en ambas carreras) para todos los periodos, hasta tener el dato de los demás.",
+                "Docentes UCSP participantes ÷ docentes de la Facultad en esos periodos (o de la carrera, si filtras "
+                "una). Con varios periodos, cada docente cuenta una sola vez, tanto arriba como abajo. Información "
+                "proporcionada por el coordinador administrativo de la facultad.",
                 "d_kpi_doc_pct_nota"),
             kpi("Actividades totales", "d_kpi_ind",
                 "Clases espejo + COIL + profesores visitantes + otras actividades. En profesor visitante cuenta cada "
@@ -1537,11 +1621,7 @@ panel_curr_alumnos = ui.nav_panel(
     ui.output_ui("c_aviso"),
     ui.layout_sidebar(
         ui.sidebar(
-            ui.layout_columns(
-                ui.input_select("c_desde", "Periodo desde", choices=[]),
-                ui.input_select("c_hasta", "Periodo hasta", choices=[]),
-                col_widths=(6, 6), gap="0.5rem",
-            ),
+            periodos("c"),
             multi("c_esc", "Escuela profesional"),
             ui.input_checkbox_group("c_tipo", "Actividades que cuentan para el indicador",
                                     choices=TIPOS_CURRICULA, selected=TIPOS_CURRICULA),
@@ -1627,11 +1707,7 @@ panel_satisfaccion = ui.nav_panel(
     ui.output_ui("q_aviso"),
     ui.layout_sidebar(
         ui.sidebar(
-            ui.layout_columns(
-                ui.input_select("q_desde", "Periodo desde", choices=[]),
-                ui.input_select("q_hasta", "Periodo hasta", choices=[]),
-                col_widths=(6, 6), gap="0.5rem",
-            ),
+            periodos("q"),
             multi("q_prog", "Programa profesional"),
             multi("q_tipo", "Tipo de actividad"),
             multi("q_curso", "Curso"),
@@ -1898,9 +1974,9 @@ panel_presentacion = ui.nav_panel(
         _seccion(
             "Cómo usarlo",
             ui.div(
-                ui.div(ui.strong("Filtros"), ui.span(" — en el panel izquierdo de cada pestaña: periodo desde/hasta, "
+                ui.div(ui.strong("Filtros"), ui.span(" — en el panel izquierdo de cada pestaña: periodos, "
                                                      "escuela, país, etc. Se aplican a todo lo que ves en esa pestaña. Cada pestaña abre "
-                                                     "en el semestre en curso; para ver el histórico, cambia «Periodo desde»."), class_="tip"),
+                                                     "en el semestre en curso; haz clic en los periodos que quieras sumar (o «Todos» para el histórico)."), class_="tip"),
                 ui.div(ui.strong("Gráficos"), ui.span(" — pasa el mouse sobre una barra o país para ver el valor exacto; "
                                                       "con el botón de ampliar (esquina inferior derecha) se ven a pantalla completa."), class_="tip"),
                 ui.div(ui.strong("Notas en gris"), ui.span(" — explican de dónde salen los datos y cómo se calcula "
@@ -2055,6 +2131,21 @@ app_ui = ui.page_navbar(
         #sub_inicio .nav-link, #sub_alumnos .nav-link, #sub_docentes .nav-link {{ color:{T['tinta_2']} !important; font-weight:500; }}
         #sub_inicio .nav-link.active, #sub_alumnos .nav-link.active, #sub_docentes .nav-link.active {{ color:{T['tinta']} !important; border-bottom-color:{T['acento']}; }}
         .card-header .form-group {{ margin-bottom: 0; }}
+        /* ---- Periodos como botones ---- */
+        .per-botones {{ margin-bottom: 1rem; }}
+        .per-botones .control-label {{ margin-bottom: .35rem; }}
+        .per-acciones {{ font-size: .78rem; }}
+        .per-acciones a {{ color:{T['acento']}; text-decoration: none; }}
+        .per-botones .shiny-options-group {{ display:flex !important; flex-wrap:wrap; gap:.3rem; justify-content:flex-start; }}
+        .per-botones label.checkbox-inline {{ margin:0 !important; padding:0 !important; width:auto !important; }}
+        .per-botones label.checkbox-inline input {{ position:absolute; opacity:0; pointer-events:none; }}
+        .per-botones label.checkbox-inline span {{ display:inline-block; padding:.25rem .55rem; border-radius:999px;
+                                          cursor:pointer; font-size:.8rem; border:1px solid {T['grilla']};
+                                          color:{T['tinta_2']}; background:{T['superficie']}; user-select:none;
+                                          transition: all .12s ease; }}
+        .per-botones label.checkbox-inline span:hover {{ border-color:{T['acento']}; color:{T['tinta']}; }}
+        .per-botones label.checkbox-inline input:checked + span {{ background:{T['acento']}; border-color:{T['acento']};
+                                                                   color:#fff; }}
         .kpi-nota {{ font-size: .72rem; color:{T['nota_texto']}; background:{T['nota_fondo']};
                      border-radius: 6px; padding: .35rem .5rem; margin: .5rem 0 0; line-height: 1.25; }}
         .kpi-dinamica {{ font-size: .8rem; color:{T['tinta']}; font-weight: 500; }}
@@ -2175,13 +2266,10 @@ def _periodo_inicial(per: list) -> str:
     return hasta_hoy[-1] if hasta_hoy else per[-1]
 
 
-def _filtrar(df, desde, hasta, filtros: dict):
-    validos = _periodos(df)
+def _filtrar(df, periodos_sel, filtros: dict):
     d = df
-    if validos and desde and hasta:
-        desde, hasta = sorted([desde, hasta])
-        if (desde, hasta) != (validos[0], validos[-1]):   # solo si el usuario acotó el rango
-            d = d[(d["Periodo"] >= desde) & (d["Periodo"] <= hasta) & d["Periodo"].isin(validos)]
+    if periodos_sel:                                      # sin periodos marcados = todos
+        d = d[d["Periodo"].isin(list(periodos_sel))]
     for col, sel in filtros.items():
         if sel:
             d = d[d[col].isin(sel)]
@@ -2248,14 +2336,36 @@ def server(input, output, session):
             ui.update_selectize(id_, choices=opciones, selected=actual)
         per = _periodos(df)
         if per:
-            d_act, h_act = input[f"{pre}_desde"](), input[f"{pre}_hasta"]()
-            inicial = _periodo_inicial(per)
-            desde = inicial if limpiar or d_act not in per else d_act
-            hasta = inicial if limpiar or h_act not in per else h_act
-            ui.update_select(f"{pre}_desde", choices=per, selected=desde)
-            ui.update_select(f"{pre}_hasta", choices=per, selected=hasta)
+            actual = [p for p in input[f"{pre}_per"]() if p in per]
+            sel = [_periodo_inicial(per)] if limpiar else actual
+            ui.update_checkbox_group(f"{pre}_per", choices=per[::-1], selected=sel, inline=True)
 
     primera_vez = {"s": True, "d": True, "c": True}
+
+    # Atajos de los botones de periodos: Actual / Todos / Ninguno
+    def _atajos_periodos(pre, base):
+        @reactive.effect
+        @reactive.event(input[f"{pre}_per_actual"])
+        def _():
+            per = _periodos(base())
+            if per:
+                ui.update_checkbox_group(f"{pre}_per", selected=[_periodo_inicial(per)])
+
+        @reactive.effect
+        @reactive.event(input[f"{pre}_per_todos"])
+        def _():
+            ui.update_checkbox_group(f"{pre}_per", selected=_periodos(base()))
+
+        @reactive.effect
+        @reactive.event(input[f"{pre}_per_ninguno"])
+        def _():
+            ui.update_checkbox_group(f"{pre}_per", selected=[])
+
+    _atajos_periodos("s", lambda: sal())
+    _atajos_periodos("e", lambda: ent())
+    _atajos_periodos("c", lambda: cur()[0])
+    _atajos_periodos("d", lambda: doc())
+    _atajos_periodos("q", lambda: enc())
 
     @reactive.effect
     def _():
@@ -2278,7 +2388,7 @@ def server(input, output, session):
     # ============ SALIENTE ============
     @reactive.calc
     def s_f():
-        return _filtrar(sal(), input.s_desde(), input.s_hasta(), {col: input[id_]() for id_, col in FILTROS_S.items()})
+        return _filtrar(sal(), input.s_per(), {col: input[id_]() for id_, col in FILTROS_S.items()})
 
     @render.text
     def s_kpi_total(): return f"{len(s_f()):,}"
@@ -2527,7 +2637,7 @@ def server(input, output, session):
     @reactive.calc
     def c_base():
         base, _m = cur()
-        return _filtrar(base, input.c_desde(), input.c_hasta(),
+        return _filtrar(base, input.c_per(),
                         {col: input[id_]() for id_, col in FILTROS_C.items()})
 
     @reactive.calc
@@ -2700,7 +2810,7 @@ def server(input, output, session):
 
     @reactive.calc
     def d_filas():
-        return _filtrar(doc(), input.d_desde(), input.d_hasta(),
+        return _filtrar(doc(), input.d_per(),
                         {col: input[id_]() for id_, col in FILTROS_D.items()})
 
     @reactive.calc
@@ -2743,25 +2853,40 @@ def server(input, output, session):
         p = d_act()["Profesor UCSP"]
         return str(p[~p.isin(["Sin información", "No aplica"])].nunique())
     def _doc_pct():
-        p = d_act()["Profesor UCSP"]
-        n = p[~p.isin(["Sin información", "No aplica"])].nunique()
-        ref = max(DOCENTES_FACULTAD)                        # periodo con dato (hoy 2026-02)
-        tot = DOCENTES_FACULTAD[ref]
+        """Docentes distintos que participaron ÷ docentes distintos de la Facultad en los periodos elegidos."""
+        f = d_filas()
+        f = f[~f["Profesor UCSP"].isin(["Sin información", "No aplica"])]
         car = list(input.d_car())
-        if len(car) == 1 and car[0] in tot:
-            return n, tot[car[0]], ref, car[0]
-        return n, tot["Facultad"], ref, "Facultad"
+        quien = car[0] if len(car) == 1 and car[0] in ("Administración de Negocios", "Contabilidad") else "Facultad"
+        periodos = sorted(set(input.d_per()) or set(_periodos(doc())))
+        con = [p for p in periodos if p in DOCENTES_FACULTAD_IDS]
+        sin = [p for p in periodos if p not in DOCENTES_FACULTAD_IDS]
+        n = f.loc[f["Periodo"].isin(con), "Profesor UCSP"].str.strip().str.lower().nunique()
+        total = set()
+        for p in con:
+            listas = DOCENTES_FACULTAD_IDS[p]
+            total |= set(listas[quien]) if quien != "Facultad" else set().union(*listas.values())
+        return n, len(total), con, sin, quien
 
     @render.text
     def d_kpi_doc_pct():
-        n, den, _r, _c = _doc_pct()
+        n, den, *_ = _doc_pct()
         return f"{n / den:.0%}" if den else "–"
 
     @render.text
     def d_kpi_doc_pct_nota():
-        n, den, ref, quien = _doc_pct()
+        n, den, con, sin, quien = _doc_pct()
         base = "de la Facultad" if quien == "Facultad" else f"de {quien}"
-        return f"{n} de {den} docentes {base} (total de {ref})"
+        if not con:
+            return "Sin total de docentes para los periodos elegidos"
+        if len(con) == 1:
+            txt = f"{n} de {den} docentes {base} ({con[0]})"
+        else:
+            txt = f"{n} de {den} docentes distintos {base} en {len(con)} periodos"
+        if sin:
+            txt += (f" · {len(sin)} periodos sin total de docentes (no se incluyen)" if len(sin) > 2
+                    else f" · sin total de docentes: {', '.join(sin)} (no se incluye{'n' if len(sin) > 1 else ''})")
+        return txt
 
     @render.text
     def d_kpi_uni():
@@ -2894,7 +3019,7 @@ def server(input, output, session):
 
     @reactive.calc
     def q_f():
-        return _filtrar(enc(), input.q_desde(), input.q_hasta(), {col: input[id_]() for id_, col in FILTROS_Q.items()})
+        return _filtrar(enc(), input.q_per(), {col: input[id_]() for id_, col in FILTROS_Q.items()})
 
     @render.text
     def q_kpi_n(): return f"{len(q_f()):,}"
@@ -3395,7 +3520,7 @@ def server(input, output, session):
     # ============ ENTRANTE ============
     @reactive.calc
     def e_f():
-        return _filtrar(ent(), input.e_desde(), input.e_hasta(), {col: input[id_]() for id_, col in FILTROS_E.items()})
+        return _filtrar(ent(), input.e_per(), {col: input[id_]() for id_, col in FILTROS_E.items()})
 
     @render.text
     def e_kpi_total(): return f"{len(e_f()):,}"
