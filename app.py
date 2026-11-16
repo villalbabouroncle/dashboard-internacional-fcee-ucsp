@@ -2104,9 +2104,80 @@ def panel_ruta(k):
     )
 
 
+# ─────────────────────────────────────────────────────────────
+# INDICADORES POA · METAS (por escuela y año). Para cambiar una meta, edita este diccionario.
+# ─────────────────────────────────────────────────────────────
+POA_ANIOS = [2026, 2027, 2028, 2029, 2030]
+POA_INDICADORES = [   # (clave, nombre, es porcentaje)
+    ("pct_est", "% de estudiantes con experiencia internacional", True),
+    ("sal", "N.º de estudiantes en movilidad saliente", False),
+    ("ent", "N.º de estudiantes en movilidad entrante", False),
+    ("pct_doc", "% de docentes con experiencia en actividades internacionales", True),
+]
+POA_METAS = {
+    "ADM": {"pct_est": {2026: 20, 2027: 25, 2028: 30, 2029: 35, 2030: 40},
+            "sal": {2026: 8, 2027: 10, 2028: 10, 2029: 12, 2030: 12},
+            "ent": {2027: 2},
+            "pct_doc": {2027: 20}},
+    "CONT": {"pct_est": {2026: 20, 2027: 25, 2028: 30, 2029: 35, 2030: 40},
+             "sal": {2026: 1, 2027: 2, 2028: 2, 2029: 3, 2030: 3},
+             "ent": {2027: 1},
+             "pct_doc": {2027: 20}},
+}
+POA_ANIO_AVANCE = 2026
+
+
+def _poa_fmt(v, pct):
+    return f"{v:g}%" if pct else f"{v:g}"
+
+
+def _poa_tabla():
+    cab = ui.tags.tr(ui.tags.th("Indicador"),
+                     *[ui.tags.th(str(a), class_="poa-actual" if a == POA_ANIO_AVANCE else None) for a in POA_ANIOS])
+    filas = []
+    for k in ("ADM", "CONT"):
+        filas.append(ui.tags.tr(ui.tags.td(RUTAS[k]["programa"], colspan=len(POA_ANIOS) + 1), class_="poa-esc"))
+        for clave, nombre, pct in POA_INDICADORES:
+            metas = POA_METAS[k].get(clave, {})
+            filas.append(ui.tags.tr(
+                ui.tags.td(nombre),
+                *[ui.tags.td(_poa_fmt(metas[a], pct) if a in metas else "–",
+                             class_=" ".join(c for c in ("poa-actual" if a == POA_ANIO_AVANCE else "",
+                                                         "" if a in metas else "poa-vacio") if c) or None)
+                  for a in POA_ANIOS]))
+    return ui.div(ui.tags.table(ui.tags.thead(cab), ui.tags.tbody(*filas), class_="poa-tabla"), class_="poa-scroll")
+
+
+panel_poa = ui.nav_panel(
+    "Indicadores POA Metas",
+    ui.div(
+        ui.div(
+            ui.div("Plan Operativo Anual · Metas 2026 – 2030", class_="hero-kicker"),
+            ui.h1("Indicadores POA de internacionalización", class_="hero-titulo"),
+            ui.p("Metas anuales de Administración de Negocios y Contabilidad, y cuánto llevamos logrado en el año "
+                 "en curso con los datos del dashboard.", class_="hero-texto"),
+            class_="hero",
+        ),
+        _seccion("Metas por escuela y año", _poa_tabla(),
+                 subtitulo="«–» indica que el indicador no tiene meta ese año."),
+        _seccion(f"Avance {POA_ANIO_AVANCE}", ui.output_ui("poa_avance"),
+                 subtitulo=f"Lo logrado en {POA_ANIO_AVANCE} frente a la meta del año. Si un indicador no tiene meta "
+                           f"en {POA_ANIO_AVANCE}, se compara con su primera meta (2027) solo como referencia."),
+        ui.p("Cómo se mide lo logrado: % de estudiantes = alumnos únicos con clase espejo, COIL o profesor visitante "
+             "en el año ÷ alumnos distintos de la base en el año (si solo hay un semestre registrado, ese semestre "
+             "sobre los matriculados de Transparencia). Movilidad saliente y entrante = estudiantes de la escuela "
+             "registrados en el año. % de docentes = docentes distintos de la escuela con alguna actividad "
+             "internacional en el año ÷ docentes de la escuela en esos semestres (información proporcionada por el "
+             "coordinador administrativo de la facultad). Mientras el año no termina, el avance es parcial.",
+             class_="leyenda-suelta"),
+        class_="inicio-wrap",
+    ),
+)
+
+
 panel_inicio = ui.nav_panel(
     "Inicio",
-    ui.navset_underline(panel_presentacion, panel_ruta("ADM"), panel_ruta("CONT"), id="sub_inicio"),
+    ui.navset_underline(panel_presentacion, panel_poa, panel_ruta("ADM"), panel_ruta("CONT"), id="sub_inicio"),
 )
 
 app_ui = ui.page_navbar(
@@ -2254,6 +2325,32 @@ app_ui = ui.page_navbar(
         .meta-real.no {{ color:#e3a008; font-weight: 600; }}
         .meta-real.parcial {{ color:{T['tinta']}; }}
         .meta-ok {{ box-shadow: inset 0 0 0 1px #2fbf71; }}
+        .poa-scroll {{ overflow-x:auto; }}
+        .poa-tabla {{ width:100%; border-collapse:collapse; font-size:.92rem; color:{T['tinta']}; min-width:620px; }}
+        .poa-tabla th, .poa-tabla td {{ padding:.55rem .75rem; border-bottom:1px solid {T['grilla']}; text-align:center; }}
+        .poa-tabla th:first-child, .poa-tabla td:first-child {{ text-align:left; }}
+        .poa-tabla thead th {{ font-size:.78rem; color:{T['tinta_2']}; font-weight:600; }}
+        .poa-tabla td {{ font-weight:600; font-variant-numeric: tabular-nums; }}
+        .poa-tabla td:first-child {{ font-weight:400; }}
+        .poa-tabla tr.poa-esc td {{ font-weight:700; background:{T['nota_fondo']}; color:{T['acento']}; }}
+        .poa-tabla .poa-actual {{ background: color-mix(in srgb, {T['acento']} 12%, transparent); }}
+        .poa-tabla td.poa-vacio {{ color:{T['tinta_2']}; font-weight:400; }}
+        .poa-grid {{ display:grid; gap:1rem; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }}
+        .poa-card {{ background:{T['superficie']}; border:1px solid {T['grilla']}; border-radius:14px; padding:1rem 1.1rem; }}
+        .poa-card h5 {{ margin:0 0 .75rem; font-weight:700; color:{T['tinta']}; }}
+        .poa-ind {{ padding:.6rem 0; border-top:1px solid {T['grilla']}; }}
+        .poa-ind:first-of-type {{ border-top:none; }}
+        .poa-ind-cab {{ display:flex; justify-content:space-between; gap:.75rem; align-items:baseline; }}
+        .poa-ind-nom {{ font-size:.85rem; color:{T['tinta_2']}; }}
+        .poa-ind-val {{ font-size:1.05rem; font-weight:700; color:{T['tinta']}; white-space:nowrap; font-variant-numeric: tabular-nums; }}
+        .poa-ind-val span {{ font-size:.8rem; font-weight:400; color:{T['tinta_2']}; }}
+        .poa-barra {{ height:10px; border-radius:5px; background:{T['grilla']}; margin:.4rem 0 .3rem; overflow:hidden; }}
+        .poa-barra > div {{ height:100%; border-radius:5px; background:#e3a008; }}
+        .poa-barra.ok > div {{ background:#2fbf71; }}
+        .poa-barra.ref > div {{ background:{T['tinta_2']}; opacity:.55; }}
+        .poa-estado {{ font-size:.76rem; color:{T['tinta_2']}; }}
+        .poa-estado.ok {{ color:#2fbf71; font-weight:600; }}
+        .poa-estado.falta {{ color:#e3a008; font-weight:600; }}
         .avance {{ border-radius: 10px; padding: .55rem .7rem; border: 1px dashed #2fbf71; font-size: .85rem; color:{T['tinta']}; }}
         .avance-barra {{ height: 8px; border-radius: 4px; background:{T['grilla']}; margin-top:.35rem; overflow:hidden; }}
         .avance-barra > div {{ height:100%; background:#2fbf71; border-radius: 4px; }}
@@ -2595,6 +2692,80 @@ def server(input, output, session):
         except Exception:
             return {}
         return res
+
+    # ----- Indicadores POA · Metas -----
+    def _poa_logrado(k, clave, anio):
+        """(valor, nota) logrado por la escuela en el año, o None si no hay datos."""
+        esc = RUTAS[k]["escuela"]
+        try:
+            if clave == "pct_est":
+                v = _valores_anuales(k, "pct_curricula").get(anio)
+                if v is None:
+                    return None
+                pers = sorted(p for p in cur()[0]["Periodo"].unique() if str(p).startswith(str(anio)))
+                return v[0], f"Semestres con datos: {', '.join(pers)}" if pers else ""
+            if clave == "sal":
+                v = _valores_anuales(k, "movilidad").get(anio)
+                return (v[0], "") if v else (0, "")
+            if clave == "ent":
+                e = ent()
+                return int(((e["Carrera"] == esc) & (e["Año"] == anio)).sum()), ""
+            if clave == "pct_doc":
+                pers = sorted(p for p in DOCENTES_FACULTAD_IDS if p.startswith(str(anio)))
+                if not pers:
+                    return None
+                d = doc()
+                d = d[(d["Carrera"] == esc) & d["Periodo"].isin(pers)
+                      & ~d["Profesor UCSP"].isin(["Sin información", "No aplica"])]
+                n = d["Profesor UCSP"].str.strip().str.lower().nunique()
+                den = set().union(*[set(DOCENTES_FACULTAD_IDS[p].get(esc, [])) for p in pers])
+                if not den:
+                    return None
+                return n / len(den) * 100, f"{n} de {len(den)} docentes · semestres {', '.join(pers)}"
+        except Exception:
+            return None
+        return None
+
+    @render.ui
+    def poa_avance():
+        anio = POA_ANIO_AVANCE
+        tarjetas = []
+        for k in ("ADM", "CONT"):
+            filas = []
+            for clave, nombre, pct in POA_INDICADORES:
+                metas = POA_METAS[k].get(clave, {})
+                ref = anio not in metas
+                anio_meta = anio if not ref else min((a for a in metas if a > anio), default=None)
+                meta = metas.get(anio_meta)
+                r = _poa_logrado(k, clave, anio)
+                if r is None:
+                    val_txt, frac, estado, cls_e = "s/d", 0, "Aún no hay datos para este año", ""
+                    nota = ""
+                else:
+                    val, nota = r
+                    val_txt = f"{val:.1f}%" if pct else f"{val:g}"
+                    frac = min(val / meta, 1) if meta else 0
+                    if meta is None:
+                        estado, cls_e = "Sin meta definida", ""
+                    elif ref:
+                        estado, cls_e = f"Sin meta en {anio} · referencia frente a la meta {anio_meta}", ""
+                    elif val >= meta:
+                        estado, cls_e = "Meta cumplida", "ok"
+                    else:
+                        falta = meta - val
+                        estado = (f"Faltan {falta:.1f} puntos porcentuales" if pct
+                                  else f"Falta{'n' if falta != 1 else ''} {falta:g} estudiante{'s' if falta != 1 else ''}")
+                        cls_e = "falta"
+                meta_txt = f" / meta {anio_meta}: {_poa_fmt(meta, pct)}" if meta is not None else ""
+                cls_b = "ref" if ref else ("ok" if cls_e == "ok" else "")
+                filas.append(ui.div(
+                    ui.div(ui.div(nombre, class_="poa-ind-nom"),
+                           ui.div(val_txt, ui.span(meta_txt), class_="poa-ind-val"), class_="poa-ind-cab"),
+                    ui.div(ui.div(style=f"width:{frac * 100:.0f}%"), class_=f"poa-barra {cls_b}".strip()),
+                    ui.div(estado + (f" · {nota}" if nota else ""), class_=f"poa-estado {cls_e}".strip()),
+                    class_="poa-ind"))
+            tarjetas.append(ui.div(ui.h5(RUTAS[k]["programa"]), *filas, class_="poa-card"))
+        return ui.div(*tarjetas, class_="poa-grid")
 
     _UNIDAD = {"movilidad": "estudiantes en movilidad saliente",
                "pct_curricula": "de alumnos con experiencias internacionales",
