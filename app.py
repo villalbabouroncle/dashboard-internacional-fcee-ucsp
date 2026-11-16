@@ -928,19 +928,25 @@ def cg_competencias_detalle(comp: pd.DataFrame):
 # ─────────────────────────────────────────────────────────────
 ENCUESTAS_SATISFACCION = {
     "2026-01": "1ylMidkIzk3KhwI_hek8XEvs7SIDUQ8t6PvPnrNJgg9Y",
+    "2026-02": "1CoLNGeGoigIiWR-kXbi-LzUgm0TzHX1MO4FRd5RSGhE",   # Encuesta de Satisfacción General - 2026-02
 }
 # (texto que identifica la columna, etiqueta corta, dimensión)
+# Desde 2026-02 el formulario agrega tres afirmaciones (conexión y audio, casos prácticos y
+# coordinación entre docentes); en los periodos que no las tienen quedan vacías y no se promedian.
 ENC_ITEMS = [
     ("cumplio con mis expectativas", "Cumplió mis expectativas", "Aprendizaje"),
-    ("objetivos de la clase", "Los objetivos fueron claros", "Aprendizaje"),
+    ("objetivos de la", "Los objetivos fueron claros", "Aprendizaje"),
     ("contenidos desarrollados", "Contenidos relevantes para mi formación", "Aprendizaje"),
     ("metodologia utilizada", "La metodología facilitó mi aprendizaje", "Aprendizaje"),
-    ("interaccion con estudiantes", "La interacción con otra universidad me enriqueció", "Impacto intercultural"),
+    ("casos practicos", "Se usaron casos prácticos o herramientas interactivas", "Aprendizaje"),
+    ("interaccion con", "La interacción con otra universidad me enriqueció", "Impacto intercultural"),
     ("diferentes perspectivas", "Conocí otras perspectivas académicas o culturales", "Impacto intercultural"),
     ("comodo", "Me sentí cómodo(a) en un entorno internacional/virtual", "Impacto intercultural"),
     ("incremento mi interes", "Aumentó mi interés en actividades internacionales", "Impacto intercultural"),
     ("organizacion de la actividad", "La organización fue adecuada", "Logística y soporte"),
+    ("manera coordinada", "Los docentes de ambas universidades se coordinaron", "Logística y soporte"),
     ("plataforma tecnologica", "La plataforma funcionó correctamente", "Logística y soporte"),
+    ("conexion y el audio", "La conexión y el audio permitieron seguir la sesión", "Logística y soporte"),
     ("duracion de la sesion", "La duración fue apropiada", "Logística y soporte"),
     ("explico los temas", "El/la docente explicó con claridad", "Rol docente"),
     ("participacion activa", "Se promovió la participación activa", "Rol docente"),
@@ -974,6 +980,7 @@ def cargar_encuestas():
 
         base = {"Fecha": buscar("marca temporal"), "Correo": buscar("correo"), "Programa": buscar("programa"),
                 "Curso": buscar("curso"), "Semestre": buscar("semestre"),
+                "Tipo encuesta": buscar("tipo de actividad"),
                 "Calificación": buscar("calificarias"), "Recomienda": buscar("recomendarias"),
                 "Aspectos a mejorar": buscar("podrian mejorarse"), "Comentarios": buscar("comentarios")}
         faltan = [k for k in ("Curso", "Calificación") if base[k] is None]
@@ -990,7 +997,8 @@ def cargar_encuestas():
         return None, avisos, 0
     e = pd.concat(partes, ignore_index=True)
     e = e[e["Curso"].notna()].copy()
-    for c in ["Correo", "Programa", "Curso", "Calificación", "Recomienda", "Aspectos a mejorar", "Comentarios"]:
+    for c in ["Correo", "Programa", "Curso", "Tipo encuesta", "Calificación", "Recomienda", "Aspectos a mejorar",
+              "Comentarios"]:
         e[c] = e[c].map(lambda v: re.sub(r"\s+", " ", str(v)).strip() if pd.notna(v) else "")
     e["Correo"] = e["Correo"].str.lower()
     e["Programa"] = e["Programa"].replace("", "Sin información")
@@ -1055,6 +1063,8 @@ def enc_likert(e: pd.DataFrame, dim: str | None):
     for _f, lab, d in items:
         v = e[lab].dropna()
         n = len(v)
+        if not n:                                # afirmación que no se preguntó en los periodos elegidos
+            continue
         filas.append((lab, d, n, [(v == k).sum() for k in range(1, 6)], v.mean() if n else None))
     filas = filas[::-1]                         # el primero arriba
     ys = [f[0] for f in filas]
@@ -3047,8 +3057,12 @@ def server(input, output, session):
                 t = sorted(set(g["Tipo"]) & set(TIPOS_CURRICULA))
                 if t:
                     tipos[(per, _clave(cur))] = ", ".join(t)
-        e["Tipo de actividad"] = [tipos.get((p, _clave(c)), "Sin información") for p, c in zip(e["Periodo"], e["Curso"])]
-        return e
+        # Si la encuesta ya trae el tipo de actividad (desde 2026-02), se usa ese; si no, el de la base docente
+        canon_t = {_clave(t): t for t in TIPOS_CURRICULA}
+        propio = e["Tipo encuesta"].map(lambda v: canon_t.get(_clave(v), v) if v else "")
+        e["Tipo de actividad"] = [t or tipos.get((p, _clave(c)), "Sin información")
+                                  for t, p, c in zip(propio, e["Periodo"], e["Curso"])]
+        return e.drop(columns="Tipo encuesta")
 
     @render.ui
     def q_aviso():
